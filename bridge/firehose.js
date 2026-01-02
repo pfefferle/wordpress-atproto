@@ -58,22 +58,15 @@ wss.on('connection', (ws, req) => {
   const clientIp = req.socket.remoteAddress;
   console.log(`[${new Date().toISOString()}] Connected: ${clientIp}`);
 
-  // Send #identity event to announce repo
-  const identity = buildFrame('#identity', {
-    seq: seq++,
-    did: did,
-    time: new Date().toISOString(),
-    handle: host,
-  });
-  ws.send(identity);
-  console.log(`[${new Date().toISOString()}] Sent #identity for ${did}`);
+  // Don't send anything - just keep connection alive
+  // Relay should fetch data via getRepo
 
-  // Keep alive
+  // Keep alive with pings
   const interval = setInterval(() => {
     if (ws.readyState === ws.OPEN) {
       ws.ping();
     }
-  }, 30000);
+  }, 25000);
 
   ws.on('close', () => {
     clearInterval(interval);
