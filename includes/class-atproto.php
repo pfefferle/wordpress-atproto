@@ -92,7 +92,7 @@ class ATProto {
 	}
 
 	/**
-	 * Add rewrite rules for .well-known endpoints.
+	 * Add rewrite rules for .well-known endpoints and XRPC.
 	 *
 	 * @return void
 	 */
@@ -108,6 +108,13 @@ class ATProto {
 		add_rewrite_rule(
 			'^\.well-known/atproto-did$',
 			'index.php?atproto_did=1',
+			'top'
+		);
+
+		// XRPC endpoints - rewrite /xrpc/* to REST API.
+		add_rewrite_rule(
+			'^xrpc/(.+)$',
+			'index.php?rest_route=/xrpc/$matches[1]',
 			'top'
 		);
 	}
