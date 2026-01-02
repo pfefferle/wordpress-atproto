@@ -84,6 +84,7 @@ class ATProto {
 			// Sync.
 			new Rest\Sync\Get_Repo(),
 			new Rest\Sync\Get_Blob(),
+			new Rest\Sync\Subscribe_Repos(),
 		);
 
 		foreach ( $controllers as $controller ) {
