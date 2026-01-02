@@ -1,0 +1,13 @@
+{
+  "name": "atproto-wordpress-bridge",
+  "version": "0.1.0",
+  "description": "AT Protocol Firehose Bridge for WordPress",
+  "main": "firehose.js",
+  "scripts": {
+    "start": "node firehose.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "@ipld/dag-cbor": "^9.2.0"
+  }
+}
