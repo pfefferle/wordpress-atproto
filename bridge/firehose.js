@@ -5,7 +5,7 @@
  * Connects your WordPress PDS to the AT Protocol relay network.
  *
  * Usage:
- *   npm install ws @ipld/dag-cbor
+ *   npm install ws cbor
  *   node firehose.js --url=https://notiz.blog --port=8080
  *
  * Uberspace:
@@ -13,7 +13,7 @@
  */
 
 const { WebSocketServer } = require('ws');
-const dagCbor = require('@ipld/dag-cbor');
+const cbor = require('cbor');
 
 // Parse arguments
 const args = process.argv.slice(2).reduce((acc, arg) => {
@@ -86,8 +86,8 @@ function buildCommitFrame(did, record, seq) {
     body.commit = { '/': record.cid };
   }
 
-  const headerBytes = dagCbor.encode(header);
-  const bodyBytes = dagCbor.encode(body);
+  const headerBytes = cbor.encode(header);
+  const bodyBytes = cbor.encode(body);
 
   return Buffer.concat([
     encodeVarint(headerBytes.length),

@@ -8,6 +8,6 @@
   },
   "dependencies": {
     "ws": "^8.18.0",
-    "@ipld/dag-cbor": "^9.2.0"
+    "cbor": "^9.0.0"
   }
 }
