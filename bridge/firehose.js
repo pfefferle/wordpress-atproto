@@ -68,7 +68,7 @@ function buildCommitFrame(did, record, seq) {
   const body = {
     seq,
     rebase: false,
-    tooBig: false,
+    tooBig: true,  // Signal relay to fetch full repo via getRepo
     repo: did,
     rev: record.uri.split('/').pop(),
     since: null,
