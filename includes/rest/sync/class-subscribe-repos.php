@@ -58,11 +58,12 @@ class Subscribe_Repos extends XRPC_Controller {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function handle_request( \WP_REST_Request $request ) {
-		// WebSocket subscriptions are not supported in PHP.
-		// Return a proper error so relays know to use getRepo instead.
+		// WebSocket subscriptions are not supported in WordPress/PHP.
+		// This is a fundamental limitation of the PHP request/response model.
+		// Relays should use com.atproto.sync.getRepo for repository data.
 		return $this->xrpc_error(
 			'MethodNotImplemented',
-			__( 'WebSocket subscriptions are not supported. Use com.atproto.sync.getRepo for repository sync.', 'atproto' ),
+			__( 'This PDS does not support WebSocket subscriptions. Repository data is available via com.atproto.sync.getRepo.', 'atproto' ),
 			501
 		);
 	}
