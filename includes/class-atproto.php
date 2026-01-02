@@ -97,9 +97,17 @@ class ATProto {
 	 * @return void
 	 */
 	public static function add_rewrite_rules() {
+		// DID document.
 		add_rewrite_rule(
 			'^\.well-known/did\.json$',
 			'index.php?atproto_did_document=1',
+			'top'
+		);
+
+		// Handle verification (atproto-did).
+		add_rewrite_rule(
+			'^\.well-known/atproto-did$',
+			'index.php?atproto_did=1',
 			'top'
 		);
 	}
@@ -112,6 +120,7 @@ class ATProto {
 	 */
 	public static function add_query_vars( $vars ) {
 		$vars[] = 'atproto_did_document';
+		$vars[] = 'atproto_did';
 		return $vars;
 	}
 
@@ -121,6 +130,16 @@ class ATProto {
 	 * @return void
 	 */
 	public static function handle_did_document() {
+		// Handle /.well-known/atproto-did (plain text DID for handle verification).
+		if ( get_query_var( 'atproto_did' ) ) {
+			header( 'Content-Type: text/plain; charset=utf-8' );
+			header( 'Access-Control-Allow-Origin: *' );
+
+			echo esc_html( self::get_did() );
+			exit;
+		}
+
+		// Handle /.well-known/did.json (full DID document).
 		if ( ! get_query_var( 'atproto_did_document' ) ) {
 			return;
 		}

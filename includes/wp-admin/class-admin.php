@@ -18,6 +18,13 @@ defined( 'ABSPATH' ) || exit;
  */
 class Admin {
 	/**
+	 * Relay endpoint for requesting crawl.
+	 *
+	 * @var string
+	 */
+	const RELAY_ENDPOINT = 'https://bsky.network/xrpc/com.atproto.sync.requestCrawl';
+
+	/**
 	 * Initialize admin functionality.
 	 *
 	 * @return void
@@ -25,8 +32,97 @@ class Admin {
 	public static function init() {
 		add_action( 'admin_menu', array( self::class, 'add_menu' ) );
 		add_action( 'admin_init', array( self::class, 'register_settings' ) );
+		add_action( 'admin_init', array( self::class, 'handle_actions' ) );
 		add_action( 'admin_enqueue_scripts', array( self::class, 'enqueue_scripts' ) );
 		add_filter( 'plugin_action_links_' . ATPROTO_PLUGIN_BASENAME, array( self::class, 'add_action_links' ) );
+	}
+
+	/**
+	 * Handle admin actions.
+	 *
+	 * @return void
+	 */
+	public static function handle_actions() {
+		if ( ! isset( $_POST['atproto_action'] ) ) {
+			return;
+		}
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		$action = sanitize_text_field( wp_unslash( $_POST['atproto_action'] ) );
+
+		if ( 'request_crawl' === $action ) {
+			check_admin_referer( 'atproto_request_crawl' );
+			self::request_crawl();
+		}
+	}
+
+	/**
+	 * Request crawl from relay.
+	 *
+	 * @return void
+	 */
+	public static function request_crawl() {
+		$hostname = ATProto::get_handle();
+
+		$response = wp_remote_post(
+			self::RELAY_ENDPOINT,
+			array(
+				'headers' => array(
+					'Content-Type' => 'application/json',
+				),
+				'body'    => wp_json_encode( array(
+					'hostname' => $hostname,
+				) ),
+				'timeout' => 30,
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			add_settings_error(
+				'atproto',
+				'request_crawl_failed',
+				sprintf(
+					/* translators: %s: Error message */
+					__( 'Failed to request crawl: %s', 'atproto' ),
+					$response->get_error_message()
+				),
+				'error'
+			);
+			return;
+		}
+
+		$status_code = wp_remote_retrieve_response_code( $response );
+		$body        = wp_remote_retrieve_body( $response );
+
+		if ( $status_code >= 200 && $status_code < 300 ) {
+			update_option( 'atproto_crawl_requested', time() );
+			add_settings_error(
+				'atproto',
+				'request_crawl_success',
+				__( 'Successfully requested crawl from relay. Your site will be indexed soon.', 'atproto' ),
+				'success'
+			);
+		} else {
+			$error_message = $body;
+			$decoded       = json_decode( $body, true );
+			if ( $decoded && isset( $decoded['message'] ) ) {
+				$error_message = $decoded['message'];
+			}
+			add_settings_error(
+				'atproto',
+				'request_crawl_failed',
+				sprintf(
+					/* translators: 1: HTTP status code, 2: Error message */
+					__( 'Relay returned error %1$d: %2$s', 'atproto' ),
+					$status_code,
+					$error_message
+				),
+				'error'
+			);
+		}
 	}
 
 	/**
@@ -102,6 +198,14 @@ class Admin {
 			'atproto_post_types',
 			__( 'Post Types', 'atproto' ),
 			array( self::class, 'render_post_types_field' ),
+			'atproto',
+			'atproto_federation'
+		);
+
+		add_settings_field(
+			'atproto_request_crawl',
+			__( 'Relay Registration', 'atproto' ),
+			array( self::class, 'render_request_crawl_field' ),
 			'atproto',
 			'atproto_federation'
 		);
@@ -304,6 +408,46 @@ class Admin {
 			'<p class="description">%s</p>',
 			esc_html__( 'Select which post types should be federated to the AT Protocol network.', 'atproto' )
 		);
+	}
+
+	/**
+	 * Render request crawl field.
+	 *
+	 * @return void
+	 */
+	public static function render_request_crawl_field() {
+		$last_request = get_option( 'atproto_crawl_requested' );
+
+		?>
+		<form method="post" style="display: inline;">
+			<?php wp_nonce_field( 'atproto_request_crawl' ); ?>
+			<input type="hidden" name="atproto_action" value="request_crawl">
+			<?php
+			submit_button(
+				__( 'Request Crawl', 'atproto' ),
+				'secondary',
+				'submit',
+				false
+			);
+			?>
+		</form>
+		<?php
+
+		if ( $last_request ) {
+			printf(
+				'<p class="description">%s</p>',
+				sprintf(
+					/* translators: %s: Date and time of last request */
+					esc_html__( 'Last requested: %s', 'atproto' ),
+					esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $last_request ) )
+				)
+			);
+		} else {
+			printf(
+				'<p class="description">%s</p>',
+				esc_html__( 'Request the Bluesky relay to crawl your site and index your content.', 'atproto' )
+			);
+		}
 	}
 
 	/**
