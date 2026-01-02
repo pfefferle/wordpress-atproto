@@ -25,6 +25,13 @@ class Admin {
 	const RELAY_ENDPOINT = 'https://bsky.network/xrpc/com.atproto.sync.requestCrawl';
 
 	/**
+	 * Message from last crawl request.
+	 *
+	 * @var string
+	 */
+	private static $crawl_message = '';
+
+	/**
 	 * Initialize admin functionality.
 	 *
 	 * @return void
@@ -32,37 +39,43 @@ class Admin {
 	public static function init() {
 		add_action( 'admin_menu', array( self::class, 'add_menu' ) );
 		add_action( 'admin_init', array( self::class, 'register_settings' ) );
-		add_action( 'admin_init', array( self::class, 'handle_actions' ) );
+		add_action( 'admin_post_atproto_request_crawl', array( self::class, 'handle_request_crawl' ) );
 		add_action( 'admin_enqueue_scripts', array( self::class, 'enqueue_scripts' ) );
 		add_filter( 'plugin_action_links_' . ATPROTO_PLUGIN_BASENAME, array( self::class, 'add_action_links' ) );
 	}
 
 	/**
-	 * Handle admin actions.
+	 * Handle request crawl action.
 	 *
 	 * @return void
 	 */
-	public static function handle_actions() {
-		if ( ! isset( $_POST['atproto_action'] ) ) {
-			return;
-		}
-
+	public static function handle_request_crawl() {
 		if ( ! current_user_can( 'manage_options' ) ) {
-			return;
+			wp_die( esc_html__( 'You do not have permission to perform this action.', 'atproto' ) );
 		}
 
-		$action = sanitize_text_field( wp_unslash( $_POST['atproto_action'] ) );
+		check_admin_referer( 'atproto_request_crawl' );
 
-		if ( 'request_crawl' === $action ) {
-			check_admin_referer( 'atproto_request_crawl' );
-			self::request_crawl();
-		}
+		$result = self::request_crawl();
+
+		// Redirect back to settings page with result.
+		$redirect_url = add_query_arg(
+			array(
+				'page'                  => 'atproto',
+				'atproto_crawl_result'  => $result ? 'success' : 'error',
+				'atproto_crawl_message' => rawurlencode( self::$crawl_message ),
+			),
+			admin_url( 'options-general.php' )
+		);
+
+		wp_safe_redirect( $redirect_url );
+		exit;
 	}
 
 	/**
 	 * Request crawl from relay.
 	 *
-	 * @return void
+	 * @return bool True on success, false on failure.
 	 */
 	public static function request_crawl() {
 		$hostname = ATProto::get_handle();
@@ -81,17 +94,12 @@ class Admin {
 		);
 
 		if ( is_wp_error( $response ) ) {
-			add_settings_error(
-				'atproto',
-				'request_crawl_failed',
-				sprintf(
-					/* translators: %s: Error message */
-					__( 'Failed to request crawl: %s', 'atproto' ),
-					$response->get_error_message()
-				),
-				'error'
+			self::$crawl_message = sprintf(
+				/* translators: %s: Error message */
+				__( 'Failed to request crawl: %s', 'atproto' ),
+				$response->get_error_message()
 			);
-			return;
+			return false;
 		}
 
 		$status_code = wp_remote_retrieve_response_code( $response );
@@ -99,30 +107,22 @@ class Admin {
 
 		if ( $status_code >= 200 && $status_code < 300 ) {
 			update_option( 'atproto_crawl_requested', time() );
-			add_settings_error(
-				'atproto',
-				'request_crawl_success',
-				__( 'Successfully requested crawl from relay. Your site will be indexed soon.', 'atproto' ),
-				'success'
-			);
-		} else {
-			$error_message = $body;
-			$decoded       = json_decode( $body, true );
-			if ( $decoded && isset( $decoded['message'] ) ) {
-				$error_message = $decoded['message'];
-			}
-			add_settings_error(
-				'atproto',
-				'request_crawl_failed',
-				sprintf(
-					/* translators: 1: HTTP status code, 2: Error message */
-					__( 'Relay returned error %1$d: %2$s', 'atproto' ),
-					$status_code,
-					$error_message
-				),
-				'error'
-			);
+			self::$crawl_message = __( 'Successfully requested crawl from relay. Your site will be indexed soon.', 'atproto' );
+			return true;
 		}
+
+		$error_message = $body;
+		$decoded       = json_decode( $body, true );
+		if ( $decoded && isset( $decoded['message'] ) ) {
+			$error_message = $decoded['message'];
+		}
+		self::$crawl_message = sprintf(
+			/* translators: 1: HTTP status code, 2: Error message */
+			__( 'Relay returned error %1$d: %2$s', 'atproto' ),
+			$status_code,
+			$error_message
+		);
+		return false;
 	}
 
 	/**
@@ -263,6 +263,22 @@ class Admin {
 	public static function render_settings_page() {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
+		}
+
+		// Display crawl result message if present.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( isset( $_GET['atproto_crawl_result'] ) ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$result  = sanitize_text_field( wp_unslash( $_GET['atproto_crawl_result'] ) );
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$message = isset( $_GET['atproto_crawl_message'] ) ? sanitize_text_field( wp_unslash( $_GET['atproto_crawl_message'] ) ) : '';
+			$class   = 'success' === $result ? 'notice-success' : 'notice-error';
+
+			printf(
+				'<div class="notice %s is-dismissible"><p>%s</p></div>',
+				esc_attr( $class ),
+				esc_html( $message )
+			);
 		}
 
 		?>
@@ -417,21 +433,16 @@ class Admin {
 	 */
 	public static function render_request_crawl_field() {
 		$last_request = get_option( 'atproto_crawl_requested' );
+		$crawl_url    = wp_nonce_url(
+			admin_url( 'admin-post.php?action=atproto_request_crawl' ),
+			'atproto_request_crawl'
+		);
 
-		?>
-		<form method="post" style="display: inline;">
-			<?php wp_nonce_field( 'atproto_request_crawl' ); ?>
-			<input type="hidden" name="atproto_action" value="request_crawl">
-			<?php
-			submit_button(
-				__( 'Request Crawl', 'atproto' ),
-				'secondary',
-				'submit',
-				false
-			);
-			?>
-		</form>
-		<?php
+		printf(
+			'<a href="%s" class="button button-secondary">%s</a>',
+			esc_url( $crawl_url ),
+			esc_html__( 'Request Crawl', 'atproto' )
+		);
 
 		if ( $last_request ) {
 			printf(
