@@ -11,8 +11,6 @@ namespace ATProto\Rest\Server;
 
 use ATProto\ATProto;
 use ATProto\Rest\XRPC_Controller;
-use WP_REST_Request;
-use WP_REST_Response;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -41,24 +39,24 @@ class Describe_Server extends XRPC_Controller {
 	/**
 	 * Handle the request.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return WP_REST_Response
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response
 	 */
-	public function handle_request( WP_REST_Request $request ) {
+	public function handle_request( \WP_REST_Request $request ) {
 		$did = ATProto::get_did();
 
 		return $this->xrpc_response( array(
-			'did'              => $did,
-			'availableUserDomains' => array(
+			'did'                       => $did,
+			'availableUserDomains'      => array(
 				ATProto::get_handle(),
 			),
-			'inviteCodeRequired' => false,
+			'inviteCodeRequired'        => false,
 			'phoneVerificationRequired' => false,
-			'links' => array(
+			'links'                     => array(
 				'privacyPolicy'  => home_url( '/privacy-policy/' ),
 				'termsOfService' => home_url( '/terms-of-service/' ),
 			),
-			'contact' => array(
+			'contact'                   => array(
 				'email' => get_option( 'admin_email' ),
 			),
 		) );

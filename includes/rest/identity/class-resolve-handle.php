@@ -11,9 +11,6 @@ namespace ATProto\Rest\Identity;
 
 use ATProto\ATProto;
 use ATProto\Rest\XRPC_Controller;
-use WP_REST_Request;
-use WP_REST_Response;
-use WP_Error;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -60,12 +57,12 @@ class Resolve_Handle extends XRPC_Controller {
 	 * Validate handle parameter.
 	 *
 	 * @param string $handle The handle to validate.
-	 * @return bool|WP_Error True if valid, WP_Error otherwise.
+	 * @return bool|\WP_Error True if valid, WP_Error otherwise.
 	 */
 	public function validate_handle( $handle ) {
 		// Handle should be a valid domain name or handle format.
 		if ( empty( $handle ) ) {
-			return new WP_Error(
+			return new \WP_Error(
 				'InvalidHandle',
 				__( 'Handle is required.', 'atproto' )
 			);
@@ -76,7 +73,7 @@ class Resolve_Handle extends XRPC_Controller {
 
 		// Basic validation: should look like a domain.
 		if ( ! preg_match( '/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/', $handle ) ) {
-			return new WP_Error(
+			return new \WP_Error(
 				'InvalidHandle',
 				__( 'Invalid handle format.', 'atproto' )
 			);
@@ -88,10 +85,10 @@ class Resolve_Handle extends XRPC_Controller {
 	/**
 	 * Handle the request.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return WP_REST_Response|WP_Error
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_request( WP_REST_Request $request ) {
+	public function handle_request( \WP_REST_Request $request ) {
 		$handle = ltrim( $request->get_param( 'handle' ), '@' );
 
 		// Check if this handle is for our site.

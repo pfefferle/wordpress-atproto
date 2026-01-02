@@ -7,18 +7,12 @@
 
 namespace ATProto\Rest;
 
-use WP_REST_Controller;
-use WP_REST_Server;
-use WP_REST_Request;
-use WP_REST_Response;
-use WP_Error;
-
 defined( 'ABSPATH' ) || exit;
 
 /**
  * Abstract XRPC Controller class.
  */
-abstract class XRPC_Controller extends WP_REST_Controller {
+abstract class XRPC_Controller extends \WP_REST_Controller {
 	/**
 	 * Namespace for XRPC endpoints.
 	 *
@@ -46,7 +40,7 @@ abstract class XRPC_Controller extends WP_REST_Controller {
 	 * @return void
 	 */
 	public function register_routes() {
-		$method = 'query' === $this->get_method_type() ? WP_REST_Server::READABLE : WP_REST_Server::CREATABLE;
+		$method = 'query' === $this->get_method_type() ? \WP_REST_Server::READABLE : \WP_REST_Server::CREATABLE;
 
 		register_rest_route(
 			$this->namespace,
@@ -65,18 +59,18 @@ abstract class XRPC_Controller extends WP_REST_Controller {
 	/**
 	 * Handle the XRPC request.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return WP_REST_Response|WP_Error The response or error.
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response|\WP_Error The response or error.
 	 */
-	abstract public function handle_request( WP_REST_Request $request );
+	abstract public function handle_request( \WP_REST_Request $request );
 
 	/**
 	 * Check request permissions.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return bool|WP_Error True if permitted, WP_Error otherwise.
+	 * @param \WP_REST_Request $request The request object.
+	 * @return bool|\WP_Error True if permitted, WP_Error otherwise.
 	 */
-	public function check_permissions( WP_REST_Request $request ) {
+	public function check_permissions( \WP_REST_Request $request ) {
 		// Default: public access for query methods.
 		if ( 'query' === $this->get_method_type() ) {
 			return true;
@@ -98,15 +92,15 @@ abstract class XRPC_Controller extends WP_REST_Controller {
 	/**
 	 * Verify authentication for the request.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return bool|WP_Error True if authenticated, WP_Error otherwise.
+	 * @param \WP_REST_Request $request The request object.
+	 * @return bool|\WP_Error True if authenticated, WP_Error otherwise.
 	 */
-	protected function verify_auth( WP_REST_Request $request ) {
+	protected function verify_auth( \WP_REST_Request $request ) {
 		// Check for Bearer token.
 		$auth_header = $request->get_header( 'Authorization' );
 
 		if ( empty( $auth_header ) ) {
-			return new WP_Error(
+			return new \WP_Error(
 				'AuthenticationRequired',
 				__( 'Authentication required.', 'atproto' ),
 				array( 'status' => 401 )
@@ -114,7 +108,7 @@ abstract class XRPC_Controller extends WP_REST_Controller {
 		}
 
 		// TODO: Implement proper JWT/OAuth token verification.
-		return new WP_Error(
+		return new \WP_Error(
 			'InvalidToken',
 			__( 'Invalid or expired token.', 'atproto' ),
 			array( 'status' => 401 )
@@ -127,10 +121,10 @@ abstract class XRPC_Controller extends WP_REST_Controller {
 	 * @param string $error   The error code.
 	 * @param string $message The error message.
 	 * @param int    $status  HTTP status code.
-	 * @return WP_Error The error object.
+	 * @return \WP_Error The error object.
 	 */
 	protected function xrpc_error( $error, $message, $status = 400 ) {
-		return new WP_Error(
+		return new \WP_Error(
 			$error,
 			$message,
 			array( 'status' => $status )
@@ -142,9 +136,9 @@ abstract class XRPC_Controller extends WP_REST_Controller {
 	 *
 	 * @param array $data   The response data.
 	 * @param int   $status HTTP status code.
-	 * @return WP_REST_Response The response object.
+	 * @return \WP_REST_Response The response object.
 	 */
 	protected function xrpc_response( $data, $status = 200 ) {
-		return new WP_REST_Response( $data, $status );
+		return new \WP_REST_Response( $data, $status );
 	}
 }

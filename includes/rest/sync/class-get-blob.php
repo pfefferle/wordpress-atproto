@@ -12,9 +12,6 @@ namespace ATProto\Rest\Sync;
 use ATProto\ATProto;
 use ATProto\Collection\Blobs;
 use ATProto\Rest\XRPC_Controller;
-use WP_REST_Request;
-use WP_REST_Response;
-use WP_Error;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -65,10 +62,10 @@ class Get_Blob extends XRPC_Controller {
 	/**
 	 * Handle the request.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return WP_REST_Response|WP_Error
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_request( WP_REST_Request $request ) {
+	public function handle_request( \WP_REST_Request $request ) {
 		$did = $request->get_param( 'did' );
 		$cid = $request->get_param( 'cid' );
 
@@ -93,13 +90,13 @@ class Get_Blob extends XRPC_Controller {
 		}
 
 		// Return as binary with appropriate content type.
-		$response = new WP_REST_Response( null, 200 );
+		$response = new \WP_REST_Response( null, 200 );
 		$response->header( 'Content-Type', $blob['mimeType'] );
 		$response->header( 'Content-Length', $blob['size'] );
 
 		// Output binary data directly.
 		add_filter( 'rest_pre_serve_request', function ( $served ) use ( $blob ) {
-			echo $blob['data'];
+			echo $blob['data']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			return true;
 		} );
 

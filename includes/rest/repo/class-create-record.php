@@ -14,9 +14,6 @@ use ATProto\Repository\Repository;
 use ATProto\Repository\TID;
 use ATProto\Handler\Handler;
 use ATProto\Rest\XRPC_Controller;
-use WP_REST_Request;
-use WP_REST_Response;
-use WP_Error;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -90,15 +87,14 @@ class Create_Record extends XRPC_Controller {
 	/**
 	 * Handle the request.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return WP_REST_Response|WP_Error
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_request( WP_REST_Request $request ) {
+	public function handle_request( \WP_REST_Request $request ) {
 		$repo       = $request->get_param( 'repo' );
 		$collection = $request->get_param( 'collection' );
 		$rkey       = $request->get_param( 'rkey' );
 		$record     = $request->get_param( 'record' );
-		$validate   = $request->get_param( 'validate' );
 
 		// Check if this is our repository (for local writes).
 		$our_did    = ATProto::get_did();
@@ -120,7 +116,7 @@ class Create_Record extends XRPC_Controller {
 	 * @param string $collection The collection.
 	 * @param array  $record     The record.
 	 * @param string $rkey       Optional record key.
-	 * @return WP_REST_Response|WP_Error
+	 * @return \WP_REST_Response|\WP_Error
 	 */
 	private function handle_local_create( $collection, $record, $rkey = '' ) {
 		if ( empty( $rkey ) ) {
@@ -153,7 +149,7 @@ class Create_Record extends XRPC_Controller {
 	 * @param string $collection The collection.
 	 * @param array  $record     The record.
 	 * @param string $rkey       The record key.
-	 * @return WP_REST_Response|WP_Error
+	 * @return \WP_REST_Response|\WP_Error
 	 */
 	private function handle_remote_create( $repo, $collection, $record, $rkey ) {
 		// This is an incoming federated record.

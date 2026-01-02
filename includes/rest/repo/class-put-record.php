@@ -12,9 +12,6 @@ namespace ATProto\Rest\Repo;
 use ATProto\ATProto;
 use ATProto\Repository\Repository;
 use ATProto\Rest\XRPC_Controller;
-use WP_REST_Request;
-use WP_REST_Response;
-use WP_Error;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -94,14 +91,14 @@ class Put_Record extends XRPC_Controller {
 	/**
 	 * Handle the request.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return WP_REST_Response|WP_Error
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_request( WP_REST_Request $request ) {
-		$repo       = $request->get_param( 'repo' );
-		$collection = $request->get_param( 'collection' );
-		$rkey       = $request->get_param( 'rkey' );
-		$record     = $request->get_param( 'record' );
+	public function handle_request( \WP_REST_Request $request ) {
+		$repo        = $request->get_param( 'repo' );
+		$collection  = $request->get_param( 'collection' );
+		$rkey        = $request->get_param( 'rkey' );
+		$record      = $request->get_param( 'record' );
 		$swap_record = $request->get_param( 'swapRecord' );
 
 		// Check if this is our repository.

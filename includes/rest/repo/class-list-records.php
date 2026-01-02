@@ -12,9 +12,6 @@ namespace ATProto\Rest\Repo;
 use ATProto\ATProto;
 use ATProto\Repository\Record;
 use ATProto\Rest\XRPC_Controller;
-use WP_REST_Request;
-use WP_REST_Response;
-use WP_Error;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -89,10 +86,10 @@ class List_Records extends XRPC_Controller {
 				'sanitize_callback' => 'sanitize_text_field',
 			),
 			'reverse'    => array(
-				'description'       => __( 'Reverse the order of records.', 'atproto' ),
-				'type'              => 'boolean',
-				'required'          => false,
-				'default'           => false,
+				'description' => __( 'Reverse the order of records.', 'atproto' ),
+				'type'        => 'boolean',
+				'required'    => false,
+				'default'     => false,
 			),
 		);
 	}
@@ -100,10 +97,10 @@ class List_Records extends XRPC_Controller {
 	/**
 	 * Handle the request.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return WP_REST_Response|WP_Error
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_request( WP_REST_Request $request ) {
+	public function handle_request( \WP_REST_Request $request ) {
 		$repo       = $request->get_param( 'repo' );
 		$collection = $request->get_param( 'collection' );
 		$limit      = min( $request->get_param( 'limit' ), self::MAX_LIMIT );

@@ -12,9 +12,6 @@ namespace ATProto\Rest\Sync;
 use ATProto\ATProto;
 use ATProto\Repository\Repository;
 use ATProto\Rest\XRPC_Controller;
-use WP_REST_Request;
-use WP_REST_Response;
-use WP_Error;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -65,12 +62,11 @@ class Get_Repo extends XRPC_Controller {
 	/**
 	 * Handle the request.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return WP_REST_Response|WP_Error
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function handle_request( WP_REST_Request $request ) {
-		$did   = $request->get_param( 'did' );
-		$since = $request->get_param( 'since' );
+	public function handle_request( \WP_REST_Request $request ) {
+		$did = $request->get_param( 'did' );
 
 		// Check if this is our repository.
 		if ( $did !== ATProto::get_did() ) {
@@ -85,13 +81,13 @@ class Get_Repo extends XRPC_Controller {
 		$car = Repository::export_car();
 
 		// Return as binary.
-		$response = new WP_REST_Response( null, 200 );
+		$response = new \WP_REST_Response( null, 200 );
 		$response->header( 'Content-Type', 'application/vnd.ipld.car' );
 		$response->header( 'Content-Length', strlen( $car ) );
 
 		// We need to output directly for binary data.
 		add_filter( 'rest_pre_serve_request', function ( $served ) use ( $car ) {
-			echo $car;
+			echo $car; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			return true;
 		} );
 
