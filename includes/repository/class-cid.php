@@ -95,6 +95,26 @@ class CID {
 	}
 
 	/**
+	 * Create a CID from a file (for blobs).
+	 *
+	 * @param string $file_path The path to the file.
+	 * @return string|false The CID as a base32 string or false on failure.
+	 */
+	public static function from_file( $file_path ) {
+		if ( ! file_exists( $file_path ) || ! is_readable( $file_path ) ) {
+			return false;
+		}
+
+		$data = file_get_contents( $file_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		if ( false === $data ) {
+			return false;
+		}
+
+		// Use RAW codec for blobs.
+		return self::from_bytes( $data, self::CODEC_RAW );
+	}
+
+	/**
 	 * Verify that a CID matches the given data.
 	 *
 	 * @param string $cid  The CID to verify.

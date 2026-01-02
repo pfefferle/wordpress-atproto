@@ -51,6 +51,11 @@ class Record {
 	 * @return array|null The record or null if not found.
 	 */
 	public static function get( $collection, $rkey ) {
+		// For app.bsky.actor.profile with rkey=self, generate from WordPress settings.
+		if ( 'app.bsky.actor.profile' === $collection && 'self' === $rkey ) {
+			return self::get_profile_record();
+		}
+
 		// For app.bsky.feed.post, look up WordPress posts.
 		if ( 'app.bsky.feed.post' === $collection ) {
 			return self::get_post_record( $rkey );
@@ -81,6 +86,52 @@ class Record {
 		}
 
 		return self::post_to_record( $posts[0], $collection );
+	}
+
+	/**
+	 * Get the profile record from WordPress settings.
+	 *
+	 * @return array The profile record.
+	 */
+	private static function get_profile_record() {
+		$value = array(
+			'$type'       => 'app.bsky.actor.profile',
+			'displayName' => get_bloginfo( 'name' ),
+			'description' => get_bloginfo( 'description' ),
+		);
+
+		// Add avatar from site icon if available.
+		$site_icon_id = get_option( 'site_icon' );
+		if ( $site_icon_id ) {
+			$icon_url = wp_get_attachment_image_url( $site_icon_id, 'full' );
+			if ( $icon_url ) {
+				// Get image data for blob.
+				$icon_path = get_attached_file( $site_icon_id );
+				if ( $icon_path && file_exists( $icon_path ) ) {
+					$mime_type = get_post_mime_type( $site_icon_id );
+					$file_size = filesize( $icon_path );
+
+					// Create blob reference.
+					$value['avatar'] = array(
+						'$type'    => 'blob',
+						'ref'      => array(
+							'$link' => CID::from_file( $icon_path ),
+						),
+						'mimeType' => $mime_type,
+						'size'     => $file_size,
+					);
+				}
+			}
+		}
+
+		// Compute CID for the profile.
+		$cid = CID::from_cbor( $value );
+
+		return array(
+			'rkey'  => 'self',
+			'cid'   => $cid,
+			'value' => $value,
+		);
 	}
 
 	/**
@@ -385,6 +436,14 @@ class Record {
 			return array(
 				'records' => $records,
 				'cursor'  => $next_cursor,
+			);
+		}
+
+		// For app.bsky.actor.profile, return the profile record.
+		if ( 'app.bsky.actor.profile' === $collection ) {
+			return array(
+				'records' => array( self::get_profile_record() ),
+				'cursor'  => '',
 			);
 		}
 
