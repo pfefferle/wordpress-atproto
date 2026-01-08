@@ -1,3 +1,6 @@
+> [!CAUTION]
+> This is still an experimental effort to explore whether ATProto can be implemented in WordPress. It’s not working yet, but contributions are very welcome.
+
 # AT Protocol
 
 - Contributors: pfefferle
