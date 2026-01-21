@@ -7,8 +7,6 @@
 
 namespace ATProto;
 
-use ATProto\Collection\Firehose;
-
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -23,9 +21,6 @@ class ATProto {
 	public static function init() {
 		// Load text domain.
 		add_action( 'init', array( self::class, 'load_textdomain' ) );
-
-		// Register shutdown hook for firehose header emission.
-		add_action( 'shutdown', array( self::class, 'emit_firehose_header' ), 0 );
 
 		// Initialize identity module.
 		Identity\DID_Document::init();
@@ -208,36 +203,5 @@ class ATProto {
 	 */
 	public static function get_handle() {
 		return wp_parse_url( home_url(), PHP_URL_HOST );
-	}
-
-	/**
-	 * Emit firehose events as HTTP header for nginx module.
-	 *
-	 * Called on shutdown to emit any pending firehose events
-	 * as a base64-encoded CBOR frame in the X-ATProto-Event header.
-	 * The nginx module intercepts this header and broadcasts to
-	 * connected WebSocket clients.
-	 *
-	 * @return void
-	 */
-	public static function emit_firehose_header() {
-		$events = Firehose::get_pending_events();
-
-		if ( empty( $events ) ) {
-			return;
-		}
-
-		// Don't emit if headers already sent.
-		if ( headers_sent() ) {
-			return;
-		}
-
-		$cbor_frame = Firehose::encode_events( $events );
-		$encoded    = base64_encode( $cbor_frame );
-
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-		@header( 'X-ATProto-Event: ' . $encoded );
-
-		Firehose::clear_pending_events();
 	}
 }

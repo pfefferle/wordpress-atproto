@@ -55,6 +55,43 @@ sequenceDiagram
     Filter-->>PHP: Response without header
 ```
 
+## How the Header Bridge Works
+
+The module uses HTTP headers as a communication channel between PHP and nginx. This avoids the need for shared memory, sockets, or external message queues.
+
+### PHP Side
+
+When WordPress emits a firehose event (e.g., publishing a post), the `Firehose` class immediately emits an HTTP header:
+
+```php
+// In Firehose::emit_header()
+$cbor_frame = self::encode_events( array( $event ) );
+header( 'X-ATProto-Event: ' . base64_encode( $cbor_frame ), false );
+```
+
+The `false` parameter allows multiple headers with the same name. If a single request triggers multiple events, each gets its own header.
+
+The header value is base64-encoded because HTTP headers cannot contain binary data. The CBOR frame format is already defined by AT Protocol.
+
+### nginx Side
+
+The module installs a header filter that runs on every response passing through nginx. For each `X-ATProto-Event` header it finds:
+
+1. **Decode**: Base64-decode the header value back to binary CBOR
+2. **Broadcast**: Send the binary data as a WebSocket frame to all connected clients
+3. **Strip**: Remove the header from the response so it never reaches the browser
+
+```c
+// Simplified from ngx_http_atproto_firehose_header_filter()
+for each header matching "X-ATProto-Event" {
+    decoded = base64_decode(header.value);
+    broadcast_to_websocket_clients(decoded);
+    header.hash = 0;  // Strip from response
+}
+```
+
+This design keeps PHP simple (just emit headers) and makes nginx responsible for the WebSocket complexity.
+
 ## Building
 
 ### Prerequisites

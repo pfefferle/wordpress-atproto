@@ -727,7 +727,7 @@ ngx_http_atproto_firehose_header_filter(ngx_http_request_t *r)
             && ngx_strncasecmp(h[i].key.data, (u_char *)"X-ATProto-Event",
                 sizeof("X-ATProto-Event") - 1) == 0)
         {
-            /* Found the header - decode and broadcast */
+            /* Found a header - decode and broadcast */
             max_decoded_len = ngx_base64_decoded_length(h[i].value.len);
             decoded = ngx_pnalloc(r->pool, max_decoded_len);
 
@@ -750,7 +750,7 @@ ngx_http_atproto_firehose_header_filter(ngx_http_request_t *r)
             h[i].key.len = 0;
             h[i].value.len = 0;
 
-            break;
+            /* Continue to find more headers */
         }
     }
 

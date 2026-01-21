@@ -27,13 +27,6 @@ class Firehose {
 	const OPTION_QUEUE = 'atproto_firehose_queue';
 
 	/**
-	 * Events emitted during the current request.
-	 *
-	 * @var array
-	 */
-	private static $pending_events = array();
-
-	/**
 	 * Option name for sequence number.
 	 *
 	 * @var string
@@ -66,7 +59,7 @@ class Firehose {
 		);
 
 		self::queue_event( $event );
-		self::$pending_events[] = $event;
+		self::emit_header( $event );
 
 		/**
 		 * Fires when a commit event is emitted.
@@ -97,7 +90,7 @@ class Firehose {
 		);
 
 		self::queue_event( $event );
-		self::$pending_events[] = $event;
+		self::emit_header( $event );
 
 		/**
 		 * Fires when an identity event is emitted.
@@ -132,27 +125,29 @@ class Firehose {
 		}
 
 		self::queue_event( $event );
-		self::$pending_events[] = $event;
+		self::emit_header( $event );
 
 		return $seq;
 	}
 
 	/**
-	 * Get pending events for the current request.
+	 * Emit event as HTTP header for nginx module.
 	 *
-	 * @return array Array of events.
-	 */
-	public static function get_pending_events() {
-		return self::$pending_events;
-	}
-
-	/**
-	 * Clear pending events.
+	 * Emits a base64-encoded CBOR frame as X-ATProto-Event header.
+	 * Multiple headers can be emitted per request.
 	 *
+	 * @param array $event The event to emit.
 	 * @return void
 	 */
-	public static function clear_pending_events() {
-		self::$pending_events = array();
+	private static function emit_header( $event ) {
+		if ( headers_sent() ) {
+			return;
+		}
+
+		$cbor_frame = self::encode_events( array( $event ) );
+
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		@header( 'X-ATProto-Event: ' . base64_encode( $cbor_frame ), false );
 	}
 
 	/**
