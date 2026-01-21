@@ -27,6 +27,13 @@ class Firehose {
 	const OPTION_QUEUE = 'atproto_firehose_queue';
 
 	/**
+	 * Events emitted during the current request.
+	 *
+	 * @var array
+	 */
+	private static $pending_events = array();
+
+	/**
 	 * Option name for sequence number.
 	 *
 	 * @var string
@@ -59,6 +66,7 @@ class Firehose {
 		);
 
 		self::queue_event( $event );
+		self::$pending_events[] = $event;
 
 		/**
 		 * Fires when a commit event is emitted.
@@ -89,6 +97,7 @@ class Firehose {
 		);
 
 		self::queue_event( $event );
+		self::$pending_events[] = $event;
 
 		/**
 		 * Fires when an identity event is emitted.
@@ -123,8 +132,27 @@ class Firehose {
 		}
 
 		self::queue_event( $event );
+		self::$pending_events[] = $event;
 
 		return $seq;
+	}
+
+	/**
+	 * Get pending events for the current request.
+	 *
+	 * @return array Array of events.
+	 */
+	public static function get_pending_events() {
+		return self::$pending_events;
+	}
+
+	/**
+	 * Clear pending events.
+	 *
+	 * @return void
+	 */
+	public static function clear_pending_events() {
+		self::$pending_events = array();
 	}
 
 	/**
