@@ -71,13 +71,16 @@ type cborCIDTag = cbor.Tag
 // cborCommitEvent is the CBOR body for a #commit event.
 type cborCommitEvent struct {
 	Seq    int64       `cbor:"seq"`
+	Rebase bool        `cbor:"rebase"`
 	TooBig bool        `cbor:"tooBig"`
 	Repo   string      `cbor:"repo"`
-	Rev    string      `cbor:"rev"`
 	Commit cbor.Tag    `cbor:"commit"`
-	Time   string      `cbor:"time"`
+	Rev    string      `cbor:"rev"`
+	Since  *string     `cbor:"since"`
 	Blocks []byte      `cbor:"blocks"`
 	Ops    []cborOp    `cbor:"ops"`
+	Blobs  []cbor.Tag  `cbor:"blobs"`
+	Time   string      `cbor:"time"`
 }
 
 // cborOp is the CBOR body for an operation within a commit.
@@ -175,13 +178,16 @@ func eventToFrame(ev Event) ([]byte, error) {
 
 		body := cborCommitEvent{
 			Seq:    ev.Seq,
+			Rebase: false,
 			TooBig: ev.TooBig,
 			Repo:   ev.Repo,
-			Rev:    ev.Rev,
 			Commit: cidToTag(commitLink),
-			Time:   ev.Time,
+			Rev:    ev.Rev,
+			Since:  nil,
 			Blocks: []byte{},
 			Ops:    ops,
+			Blobs:  []cbor.Tag{},
+			Time:   ev.Time,
 		}
 		return buildFrame("#commit", body)
 
