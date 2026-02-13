@@ -104,17 +104,6 @@ type cborAccountEvent struct {
 	Time   string `cbor:"time"`
 }
 
-// encodeVarint encodes an unsigned integer as a varint.
-func encodeVarint(n int) []byte {
-	var buf []byte
-	for n >= 0x80 {
-		buf = append(buf, byte(n&0x7F)|0x80)
-		n >>= 7
-	}
-	buf = append(buf, byte(n))
-	return buf
-}
-
 // cidToTag wraps a CID string (multibase base32lower) as CBOR tag 42.
 // DAG-CBOR tag 42 content is: 0x00 (identity multibase) + raw CID bytes.
 func cidToTag(link string) cbor.Tag {
@@ -138,6 +127,8 @@ func cidToTag(link string) cbor.Tag {
 }
 
 // buildFrame builds a DAG-CBOR WebSocket frame.
+// Per the AT Protocol event stream spec, each WebSocket binary message
+// contains two concatenated CBOR objects: header + body (no length prefix).
 func buildFrame(eventType string, body interface{}) ([]byte, error) {
 	em, err := cbor.CanonicalEncOptions().EncMode()
 	if err != nil {
@@ -156,7 +147,6 @@ func buildFrame(eventType string, body interface{}) ([]byte, error) {
 	}
 
 	var frame []byte
-	frame = append(frame, encodeVarint(len(headerBytes))...)
 	frame = append(frame, headerBytes...)
 	frame = append(frame, bodyBytes...)
 	return frame, nil
