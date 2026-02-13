@@ -28,6 +28,10 @@ delete_option( 'atproto_mst_entries' );
 delete_option( 'atproto_followers' );
 delete_option( 'atproto_follower_count' );
 
+// Delete firehose options.
+delete_option( 'atproto_firehose_queue' );
+delete_option( 'atproto_firehose_seq' );
+
 // Delete standard.site options.
 delete_option( 'atproto_publication_tid' );
 delete_option( 'atproto_publication_subscribers' );

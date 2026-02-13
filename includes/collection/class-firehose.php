@@ -49,13 +49,18 @@ class Firehose {
 	public static function emit_commit( $operations ) {
 		$seq = self::next_seq();
 
+		$state = Repository::get_state();
+
 		$event = array(
-			'$type' => '#commit',
-			'seq'   => $seq,
-			'time'  => gmdate( 'Y-m-d\TH:i:s.000\Z' ),
-			'repo'  => ATProto::get_did(),
-			'rev'   => Repository::get_rev(),
-			'ops'   => $operations,
+			'$type'  => '#commit',
+			'seq'    => $seq,
+			'time'   => gmdate( 'Y-m-d\TH:i:s.000\Z' ),
+			'repo'   => ATProto::get_did(),
+			'rev'    => $state['rev'],
+			'commit' => array( '$link' => $state['commit'] ),
+			'tooBig' => true,
+			'blocks' => array( '$bytes' => '' ),
+			'ops'    => $operations,
 		);
 
 		self::queue_event( $event );

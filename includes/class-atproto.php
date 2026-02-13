@@ -96,6 +96,8 @@ class ATProto {
 			new Rest\Sync\Get_Blob(),
 			new Rest\Sync\List_Repos(),
 			new Rest\Sync\Subscribe_Repos(),
+			// Internal.
+			new Rest\Internal\Firehose_Events(),
 		);
 
 		foreach ( $controllers as $controller ) {

@@ -11,6 +11,7 @@
 namespace ATProto\Repository;
 
 use ATProto\ATProto;
+use ATProto\Collection\Firehose;
 use ATProto\Identity\Crypto;
 
 defined( 'ABSPATH' ) || exit;
@@ -163,6 +164,10 @@ class Repository {
 		// Store record data.
 		self::store_record_data( $key, $record, $record_cid );
 
+		// Emit firehose event.
+		$op = Firehose::create_op( 'create', $collection, $rkey, $record_cid );
+		Firehose::emit_commit( array( $op ) );
+
 		$did = self::get_did();
 
 		return array(
@@ -222,6 +227,10 @@ class Repository {
 
 		// Delete record data.
 		self::delete_record_data( $key );
+
+		// Emit firehose event.
+		$op = Firehose::create_op( 'delete', $collection, $rkey );
+		Firehose::emit_commit( array( $op ) );
 
 		return true;
 	}
