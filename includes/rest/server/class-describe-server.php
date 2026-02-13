@@ -52,6 +52,7 @@ class Describe_Server extends XRPC_Controller {
 			),
 			'inviteCodeRequired'        => false,
 			'phoneVerificationRequired' => false,
+			'showInDiscover'            => true,
 			'contact'                   => array(
 				'email' => get_option( 'admin_email' ),
 			),
