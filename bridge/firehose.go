@@ -310,6 +310,7 @@ func main() {
 	port := flag.Int("port", 8080, "WebSocket server port")
 	username := flag.String("username", os.Getenv("WP_USERNAME"), "WordPress username")
 	appPassword := flag.String("app-password", os.Getenv("WP_APP_PASSWORD"), "WordPress application password")
+	restBase := flag.String("rest-base", "wp-json", "WordPress REST API base path")
 	pollInterval := flag.Duration("poll-interval", 5*time.Second, "Poll interval")
 	flag.Parse()
 
@@ -334,7 +335,7 @@ func main() {
 
 	// Poller goroutine.
 	go func() {
-		endpoint := fmt.Sprintf("%s/wp-json/atproto/v1/firehose/events", *wpURL)
+		endpoint := fmt.Sprintf("%s/%s/atproto/v1/firehose/events", *wpURL, *restBase)
 		httpClient := &http.Client{Timeout: 30 * time.Second}
 
 		for {
