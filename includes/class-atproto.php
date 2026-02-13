@@ -244,11 +244,24 @@ class ATProto {
 			return;
 		}
 
-		$post    = get_queried_object();
+		$post = get_queried_object();
+
+		if ( ! $post instanceof \WP_Post ) {
+			return;
+		}
+
+		// Only output for enabled post types.
+		$enabled_types = get_option( 'atproto_enabled_post_types', array( 'post' ) );
+		if ( ! in_array( $post->post_type, (array) $enabled_types, true ) ) {
+			return;
+		}
+
+		// Lazily generate document TID for existing posts.
 		$doc_tid = get_post_meta( $post->ID, Transformer\Document::META_DOCUMENT_TID, true );
 
 		if ( empty( $doc_tid ) ) {
-			return;
+			$doc_tid = Repository\TID::generate();
+			update_post_meta( $post->ID, Transformer\Document::META_DOCUMENT_TID, $doc_tid );
 		}
 
 		$uri = sprintf(
