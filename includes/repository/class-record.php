@@ -647,10 +647,11 @@ class Record {
 	 * Computes CIDs, updates post meta, and notifies the network.
 	 * The record data lives in WordPress - no duplicate storage.
 	 *
-	 * @param \WP_Post $post The WordPress post.
+	 * @param \WP_Post $post   The WordPress post.
+	 * @param string   $action The action: 'create' or 'update'.
 	 * @return array|false The record info or false on failure.
 	 */
-	public static function sync_post( $post ) {
+	public static function sync_post( $post, $action = 'create' ) {
 		// Get or generate TID.
 		$rkey = get_post_meta( $post->ID, self::META_TID, true );
 		if ( empty( $rkey ) ) {
@@ -669,7 +670,7 @@ class Record {
 		update_post_meta( $post->ID, self::META_COLLECTION, 'app.bsky.feed.post' );
 
 		// Notify the network.
-		Repository::notify_change( 'create', 'app.bsky.feed.post', $rkey, $record_data['cid'] );
+		Repository::notify_change( $action, 'app.bsky.feed.post', $rkey, $record_data['cid'] );
 
 		// Also sync the document record.
 		$doc_rkey = get_post_meta( $post->ID, Document::META_DOCUMENT_TID, true );
@@ -680,7 +681,7 @@ class Record {
 			update_post_meta( $post->ID, Document::META_DOCUMENT_CID, $doc_data['cid'] );
 			update_post_meta( $post->ID, Document::META_DOCUMENT_URI, $doc_uri );
 
-			Repository::notify_change( 'create', 'site.standard.document', $doc_rkey, $doc_data['cid'] );
+			Repository::notify_change( $action, 'site.standard.document', $doc_rkey, $doc_data['cid'] );
 		}
 
 		return array(

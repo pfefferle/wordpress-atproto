@@ -157,8 +157,8 @@ class Post {
 		delete_post_meta( $post->ID, Record::META_CID );
 		delete_post_meta( $post->ID, Document::META_DOCUMENT_CID );
 
-		// Re-sync the post.
-		Record::sync_post( $post );
+		// Re-sync the post as an update.
+		Record::sync_post( $post, 'update' );
 
 		/**
 		 * Fires when a post is updated for AT Protocol.

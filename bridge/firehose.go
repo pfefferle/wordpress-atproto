@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base32"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -113,14 +115,25 @@ func encodeVarint(n int) []byte {
 	return buf
 }
 
-// cidToTag wraps a CID string (multibase) as CBOR tag 42 with a 0x00 prefix.
+// cidToTag wraps a CID string (multibase base32lower) as CBOR tag 42.
+// DAG-CBOR tag 42 content is: 0x00 (identity multibase) + raw CID bytes.
 func cidToTag(link string) cbor.Tag {
-	// For DAG-CBOR CID tag 42, the value is raw bytes: 0x00 + CID bytes.
-	// Since we use tooBig=true, relays fetch via getRepo, so we pass the
-	// CID string as-is. Relays that parse this will use the string form.
+	if len(link) > 1 && link[0] == 'b' {
+		// Base32lower multibase: strip 'b' prefix and decode.
+		enc := base32.StdEncoding.WithPadding(base32.NoPadding)
+		raw, err := enc.DecodeString(strings.ToUpper(link[1:]))
+		if err == nil {
+			return cbor.Tag{
+				Number:  42,
+				Content: append([]byte{0x00}, raw...),
+			}
+		}
+	}
+
+	// Fallback for empty or unparseable CIDs.
 	return cbor.Tag{
 		Number:  42,
-		Content: []byte("\x00" + link),
+		Content: []byte{0x00},
 	}
 }
 

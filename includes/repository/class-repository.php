@@ -68,13 +68,18 @@ class Repository {
 	/**
 	 * Get the cached repository state.
 	 *
+	 * Ensures a valid commit CID exists. If the cached state is missing
+	 * or has an empty commit, triggers a full rebuild so that sync
+	 * endpoints (getLatestCommit, listRepos) always return valid data.
+	 *
 	 * @return array The state array.
 	 */
 	public static function get_state() {
 		$state = get_option( self::OPTION_STATE, array() );
 
-		if ( empty( $state ) ) {
-			$state = self::initialize();
+		if ( empty( $state ) || empty( $state['commit'] ) ) {
+			$build = self::rebuild_commit();
+			$state = $build['state'];
 		}
 
 		return $state;
@@ -86,15 +91,8 @@ class Repository {
 	 * @return array The initial state.
 	 */
 	public static function initialize() {
-		$state = array(
-			'rev'    => TID::generate(),
-			'root'   => '',
-			'commit' => '',
-		);
-
-		update_option( self::OPTION_STATE, $state, false );
-
-		return $state;
+		$build = self::rebuild_commit();
+		return $build['state'];
 	}
 
 	/**
@@ -158,9 +156,89 @@ class Repository {
 	}
 
 	/**
+	 * Rebuild the repository commit from current WordPress data.
+	 *
+	 * Collects all records, builds the MST, and creates a signed commit.
+	 * Caches the result in options so that sync endpoints and export_car()
+	 * can reuse it without redundant work.
+	 *
+	 * @param string $rev Optional specific revision to use.
+	 * @return array Build result with 'state', 'tree', and 'record_blocks'.
+	 */
+	public static function rebuild_commit( $rev = '' ) {
+		$collections = array(
+			'app.bsky.feed.post',
+			'app.bsky.actor.profile',
+			'site.standard.publication',
+			'site.standard.document',
+		);
+
+		/** Filter the collections to include in the repository. */
+		$collections = apply_filters( 'atproto_rebuild_collections', $collections );
+
+		// Collect all records from WordPress.
+		$mst_entries   = array();
+		$record_blocks = array();
+
+		foreach ( $collections as $collection ) {
+			$result = Record::list_records( $collection, 10000 );
+
+			foreach ( $result['records'] as $record ) {
+				$value       = $record['value'];
+				$record_cbor = CBOR::encode( $value );
+				$record_cid  = CID::from_bytes( $record_cbor );
+
+				$key                          = $collection . '/' . $record['rkey'];
+				$mst_entries[ $key ]          = $record_cid;
+				$record_blocks[ $record_cid ] = $record_cbor;
+			}
+		}
+
+		// Build MST in-memory.
+		$tree = MST::build_from_entries( $mst_entries );
+
+		// Reuse existing commit if MST root and rev haven't changed.
+		$state = get_option( self::OPTION_STATE, array() );
+
+		$rev_unchanged  = empty( $rev ) || $rev === ( $state['rev'] ?? '' );
+		$root_unchanged = ! empty( $state['root'] ) && $state['root'] === $tree['root'];
+		$has_commit     = ! empty( $state['commit_data'] );
+
+		if ( $rev_unchanged && $root_unchanged && $has_commit ) {
+			return array(
+				'state'         => $state,
+				'tree'          => $tree,
+				'record_blocks' => $record_blocks,
+			);
+		}
+
+		// Create new signed commit.
+		if ( empty( $rev ) ) {
+			$rev = ! empty( $state['rev'] ) ? $state['rev'] : TID::generate();
+		}
+
+		$commit = Commit::create( $tree['root'], $rev, $state['commit'] ?? '' );
+
+		$new_state = array(
+			'rev'         => $rev,
+			'root'        => $tree['root'],
+			'commit'      => $commit['cid'],
+			'commit_data' => base64_encode( $commit['data'] ),
+		);
+		update_option( self::OPTION_STATE, $new_state, false );
+
+		return array(
+			'state'         => $new_state,
+			'tree'          => $tree,
+			'record_blocks' => $record_blocks,
+		);
+	}
+
+	/**
 	 * Notify the network of a repository change.
 	 *
-	 * Bumps the revision and emits a firehose event.
+	 * Bumps the revision, rebuilds the commit, and emits a firehose event
+	 * with the correct commit CID.
 	 *
 	 * @param string      $action     The action (create, update, delete).
 	 * @param string      $collection The collection NSID.
@@ -169,14 +247,11 @@ class Repository {
 	 * @return void
 	 */
 	public static function notify_change( $action, $collection, $rkey, $cid = null ) {
-		// Bump revision and invalidate cached commit.
-		$state                = self::get_state();
-		$state['rev']         = TID::generate();
-		$state['root']        = '';
-		$state['commit_data'] = '';
-		update_option( self::OPTION_STATE, $state, false );
+		// Rebuild commit with a new revision.
+		$rev = TID::generate();
+		self::rebuild_commit( $rev );
 
-		// Emit firehose event.
+		// Emit firehose event (state now has the correct commit CID).
 		$op = Firehose::create_op( $action, $collection, $rkey, $cid );
 		Firehose::emit_commit( array( $op ) );
 	}
@@ -274,67 +349,16 @@ class Repository {
 	 * @return string CAR file bytes.
 	 */
 	public static function export_car() {
-		$collections = array(
-			'app.bsky.feed.post',
-			'app.bsky.actor.profile',
-			'site.standard.publication',
-			'site.standard.document',
-		);
+		$build = self::rebuild_commit();
 
-		/**
-		 * Filter the collections to include in the CAR export.
-		 *
-		 * @param array $collections The collection NSIDs.
-		 */
-		$collections = apply_filters( 'atproto_rebuild_collections', $collections );
+		$state         = $build['state'];
+		$tree          = $build['tree'];
+		$record_blocks = $build['record_blocks'];
 
-		// 1. Collect all records from WordPress.
-		$mst_entries   = array();
-		$record_blocks = array(); // CID => CBOR bytes.
+		$commit_cid  = $state['commit'];
+		$commit_data = base64_decode( $state['commit_data'] );
 
-		foreach ( $collections as $collection ) {
-			$result = Record::list_records( $collection, 10000 );
-
-			foreach ( $result['records'] as $record ) {
-				$value       = $record['value'];
-				$record_cbor = CBOR::encode( $value );
-				$record_cid  = CID::from_bytes( $record_cbor );
-
-				$key                          = $collection . '/' . $record['rkey'];
-				$mst_entries[ $key ]          = $record_cid;
-				$record_blocks[ $record_cid ] = $record_cbor;
-			}
-		}
-
-		// 2. Build MST in-memory.
-		$tree = MST::build_from_entries( $mst_entries );
-
-		// 3. Reuse existing commit if MST root hasn't changed.
-		$state = self::get_state();
-
-		if ( ! empty( $state['root'] ) && $state['root'] === $tree['root'] && ! empty( $state['commit_data'] ) ) {
-			// Data hasn't changed, reuse cached commit.
-			$commit_cid  = $state['commit'];
-			$commit_data = base64_decode( $state['commit_data'] );
-		} else {
-			// Data changed or first run, create new signed commit.
-			$rev    = $state['rev'] ?: TID::generate();
-			$commit = Commit::create( $tree['root'], $rev, $state['commit'] ?? '' );
-
-			$commit_cid  = $commit['cid'];
-			$commit_data = $commit['data'];
-
-			// Cache the commit for subsequent calls.
-			$new_state = array(
-				'rev'         => $rev,
-				'root'        => $tree['root'],
-				'commit'      => $commit_cid,
-				'commit_data' => base64_encode( $commit_data ),
-			);
-			update_option( self::OPTION_STATE, $new_state, false );
-		}
-
-		// 4. Assemble CAR v1.
+		// Assemble CAR v1.
 		$header = array(
 			'version' => 1,
 			'roots'   => array(
