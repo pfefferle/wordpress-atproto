@@ -45,6 +45,12 @@ class ATProto {
 
 		// Add link to DID document in HTML head.
 		add_action( 'wp_head', array( self::class, 'add_did_link' ) );
+
+		// Register standard.site collections.
+		add_filter( 'atproto_repo_collections', array( self::class, 'register_standard_collections' ) );
+
+		// Add document verification link in HTML head.
+		add_action( 'wp_head', array( self::class, 'add_document_link' ) );
 	}
 
 	/**
@@ -112,6 +118,13 @@ class ATProto {
 			'top'
 		);
 
+		// Publication verification endpoint.
+		add_rewrite_rule(
+			'^\.well-known/site\.standard\.publication$',
+			'index.php?atproto_standard_publication=1',
+			'top'
+		);
+
 		// XRPC endpoints - rewrite /xrpc/* to REST API.
 		add_rewrite_rule(
 			'^xrpc/(.+)$',
@@ -129,6 +142,7 @@ class ATProto {
 	public static function add_query_vars( $vars ) {
 		$vars[] = 'atproto_did_document';
 		$vars[] = 'atproto_did';
+		$vars[] = 'atproto_standard_publication';
 		return $vars;
 	}
 
@@ -138,6 +152,27 @@ class ATProto {
 	 * @return void
 	 */
 	public static function handle_did_document() {
+		// Handle /.well-known/site.standard.publication (publication AT-URI).
+		if ( get_query_var( 'atproto_standard_publication' ) ) {
+			$publication_tid = get_option( Transformer\Publication::OPTION_TID );
+			if ( ! $publication_tid ) {
+				status_header( 404 );
+				exit;
+			}
+
+			$uri = sprintf(
+				'at://%s/site.standard.publication/%s',
+				self::get_did(),
+				$publication_tid
+			);
+
+			header( 'Content-Type: text/plain; charset=utf-8' );
+			header( 'Access-Control-Allow-Origin: *' );
+
+			echo esc_html( $uri );
+			exit;
+		}
+
 		// Handle /.well-known/atproto-did (plain text DID for handle verification).
 		if ( get_query_var( 'atproto_did' ) ) {
 			header( 'Content-Type: text/plain; charset=utf-8' );
@@ -171,6 +206,49 @@ class ATProto {
 			'<link rel="alternate" type="application/did+json" href="%s" />' . "\n",
 			esc_url( home_url( '/.well-known/did.json' ) )
 		);
+	}
+
+	/**
+	 * Output a <link> tag for the document AT-URI on singular post pages.
+	 *
+	 * @return void
+	 */
+	public static function add_document_link() {
+		if ( ! is_singular() ) {
+			return;
+		}
+
+		$post    = get_queried_object();
+		$doc_tid = get_post_meta( $post->ID, Transformer\Document::META_DOCUMENT_TID, true );
+
+		if ( empty( $doc_tid ) ) {
+			return;
+		}
+
+		$uri = sprintf(
+			'at://%s/site.standard.document/%s',
+			self::get_did(),
+			$doc_tid
+		);
+
+		printf(
+			'<link rel="site.standard.document" href="%s" />' . "\n",
+			esc_attr( $uri )
+		);
+	}
+
+	/**
+	 * Register standard.site collections.
+	 *
+	 * @param array $collections Existing collections.
+	 * @return array Modified collections.
+	 */
+	public static function register_standard_collections( $collections ) {
+		$collections[] = 'site.standard.publication';
+		$collections[] = 'site.standard.document';
+		$collections[] = 'site.standard.graph.subscription';
+
+		return $collections;
 	}
 
 	/**

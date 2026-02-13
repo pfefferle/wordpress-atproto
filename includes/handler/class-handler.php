@@ -82,6 +82,9 @@ abstract class Handler {
 				}
 				return null; // Regular posts not handled.
 
+			case 'site.standard.graph.subscription':
+				return new Subscription( $record, $did, $handle );
+
 			default:
 				return null;
 		}

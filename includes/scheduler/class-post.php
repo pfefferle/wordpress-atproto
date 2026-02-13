@@ -12,6 +12,7 @@ namespace ATProto\Scheduler;
 use ATProto\ATProto;
 use ATProto\Repository\Record;
 use ATProto\Repository\TID;
+use ATProto\Transformer\Document;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -148,8 +149,24 @@ class Post {
 		 */
 		do_action( 'atproto_post_created', $post_id, $tid, $uri );
 
-		// For immediate federation, we'd schedule here.
-		// For now, records are created on-demand when queried.
+		// Also generate document TID for site.standard.document.
+		$doc_tid = get_post_meta( $post_id, Document::META_DOCUMENT_TID, true );
+		if ( empty( $doc_tid ) ) {
+			$doc_tid = TID::generate();
+			update_post_meta( $post_id, Document::META_DOCUMENT_TID, $doc_tid );
+		}
+
+		$doc_uri = 'at://' . ATProto::get_did() . '/site.standard.document/' . $doc_tid;
+		update_post_meta( $post_id, Document::META_DOCUMENT_URI, $doc_uri );
+
+		/**
+		 * Fires when a document record is created for AT Protocol.
+		 *
+		 * @param int    $post_id The post ID.
+		 * @param string $doc_tid The document TID.
+		 * @param string $doc_uri The document AT-URI.
+		 */
+		do_action( 'atproto_document_created', $post_id, $doc_tid, $doc_uri );
 	}
 
 	/**
@@ -161,6 +178,9 @@ class Post {
 	public static function schedule_update( $post_id ) {
 		// Clear CID to force regeneration.
 		delete_post_meta( $post_id, Record::META_CID );
+
+		// Also clear document CID.
+		delete_post_meta( $post_id, Document::META_DOCUMENT_CID );
 
 		/**
 		 * Fires when a post is updated for AT Protocol.
@@ -177,7 +197,8 @@ class Post {
 	 * @return void
 	 */
 	public static function schedule_delete( $post_id ) {
-		$tid = get_post_meta( $post_id, Record::META_TID, true );
+		$tid     = get_post_meta( $post_id, Record::META_TID, true );
+		$doc_tid = get_post_meta( $post_id, Document::META_DOCUMENT_TID, true );
 
 		/**
 		 * Fires when a post is deleted from AT Protocol.
@@ -187,11 +208,24 @@ class Post {
 		 */
 		do_action( 'atproto_post_deleted', $post_id, $tid );
 
+		/**
+		 * Fires when a document record is deleted from AT Protocol.
+		 *
+		 * @param int    $post_id The post ID.
+		 * @param string $doc_tid The document TID.
+		 */
+		do_action( 'atproto_document_deleted', $post_id, $doc_tid );
+
 		// Clean up meta.
 		delete_post_meta( $post_id, Record::META_TID );
 		delete_post_meta( $post_id, Record::META_CID );
 		delete_post_meta( $post_id, Record::META_URI );
 		delete_post_meta( $post_id, Record::META_COLLECTION );
+
+		// Clean up document meta.
+		delete_post_meta( $post_id, Document::META_DOCUMENT_TID );
+		delete_post_meta( $post_id, Document::META_DOCUMENT_URI );
+		delete_post_meta( $post_id, Document::META_DOCUMENT_CID );
 	}
 
 	/**

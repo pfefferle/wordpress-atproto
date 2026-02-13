@@ -28,6 +28,11 @@ delete_option( 'atproto_mst_entries' );
 delete_option( 'atproto_followers' );
 delete_option( 'atproto_follower_count' );
 
+// Delete standard.site options.
+delete_option( 'atproto_publication_tid' );
+delete_option( 'atproto_publication_subscribers' );
+delete_option( 'atproto_publication_subscriber_count' );
+
 // Delete post meta.
 global $wpdb;
 
