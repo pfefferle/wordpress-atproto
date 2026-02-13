@@ -32,6 +32,7 @@ class Publication extends Base {
 	public function transform() {
 		$record = array(
 			'$type'       => 'site.standard.publication',
+			'url'         => home_url( '/' ),
 			'displayName' => get_bloginfo( 'name' ),
 			'description' => get_bloginfo( 'description' ),
 		);
