@@ -71,10 +71,15 @@ class List_Repos extends XRPC_Controller {
 	public function handle_request( \WP_REST_Request $request ) {
 		$state = Repository::get_state();
 
+		// Reinitialize if state is missing the commit CID.
+		if ( empty( $state['commit'] ) ) {
+			$state = Repository::initialize();
+		}
+
 		$repo = array(
 			'did'  => ATProto::get_did(),
-			'head' => $state['commit'] ?? '',
-			'rev'  => $state['rev'] ?? '',
+			'head' => $state['commit'],
+			'rev'  => $state['rev'],
 		);
 
 		return $this->xrpc_response( array(
