@@ -169,9 +169,11 @@ class Repository {
 	 * @return void
 	 */
 	public static function notify_change( $action, $collection, $rkey, $cid = null ) {
-		// Bump revision.
-		$state        = self::get_state();
-		$state['rev'] = TID::generate();
+		// Bump revision and invalidate cached commit.
+		$state                = self::get_state();
+		$state['rev']         = TID::generate();
+		$state['root']        = '';
+		$state['commit_data'] = '';
 		update_option( self::OPTION_STATE, $state, false );
 
 		// Emit firehose event.
@@ -267,6 +269,8 @@ class Repository {
 	 * Builds the entire repository in-memory from WordPress data.
 	 * WordPress posts are the single source of truth.
 	 *
+	 * Idempotent: reuses the existing commit if the MST root hasn't changed.
+	 *
 	 * @return string CAR file bytes.
 	 */
 	public static function export_car() {
@@ -305,24 +309,36 @@ class Repository {
 		// 2. Build MST in-memory.
 		$tree = MST::build_from_entries( $mst_entries );
 
-		// 3. Create signed commit.
-		$rev    = TID::generate();
-		$state  = self::get_state();
-		$commit = Commit::create( $tree['root'], $rev, $state['commit'] ?? '' );
+		// 3. Reuse existing commit if MST root hasn't changed.
+		$state = self::get_state();
 
-		// 4. Update cached state.
-		$new_state = array(
-			'rev'    => $rev,
-			'root'   => $tree['root'],
-			'commit' => $commit['cid'],
-		);
-		update_option( self::OPTION_STATE, $new_state, false );
+		if ( ! empty( $state['root'] ) && $state['root'] === $tree['root'] && ! empty( $state['commit_data'] ) ) {
+			// Data hasn't changed, reuse cached commit.
+			$commit_cid  = $state['commit'];
+			$commit_data = base64_decode( $state['commit_data'] );
+		} else {
+			// Data changed or first run, create new signed commit.
+			$rev    = $state['rev'] ?: TID::generate();
+			$commit = Commit::create( $tree['root'], $rev, $state['commit'] ?? '' );
 
-		// 5. Assemble CAR v1.
+			$commit_cid  = $commit['cid'];
+			$commit_data = $commit['data'];
+
+			// Cache the commit for subsequent calls.
+			$new_state = array(
+				'rev'         => $rev,
+				'root'        => $tree['root'],
+				'commit'      => $commit_cid,
+				'commit_data' => base64_encode( $commit_data ),
+			);
+			update_option( self::OPTION_STATE, $new_state, false );
+		}
+
+		// 4. Assemble CAR v1.
 		$header = array(
 			'version' => 1,
 			'roots'   => array(
-				array( '$link' => $commit['cid'] ),
+				array( '$link' => $commit_cid ),
 			),
 		);
 
@@ -330,7 +346,7 @@ class Repository {
 		$car         = self::encode_varint( strlen( $header_cbor ) ) . $header_cbor;
 
 		// Add commit block.
-		$car .= self::encode_car_block( $commit['cid'], $commit['data'] );
+		$car .= self::encode_car_block( $commit_cid, $commit_data );
 
 		// Add MST blocks.
 		foreach ( $tree['blocks'] as $cid => $data ) {
