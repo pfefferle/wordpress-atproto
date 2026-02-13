@@ -43,6 +43,9 @@ class ATProto {
 		add_filter( 'query_vars', array( self::class, 'add_query_vars' ) );
 		add_action( 'template_redirect', array( self::class, 'handle_did_document' ) );
 
+		// Prevent trailing slash redirects on .well-known endpoints.
+		add_filter( 'redirect_canonical', array( self::class, 'prevent_wellknown_redirect' ), 10, 2 );
+
 		// Add link to DID document in HTML head.
 		add_action( 'wp_head', array( self::class, 'add_did_link' ) );
 
@@ -207,6 +210,27 @@ class ATProto {
 			'<link rel="alternate" type="application/did+json" href="%s" />' . "\n",
 			esc_url( home_url( '/.well-known/did.json' ) )
 		);
+	}
+
+	/**
+	 * Prevent WordPress from adding a trailing slash to .well-known endpoints.
+	 *
+	 * WordPress redirects URLs without trailing slashes by default, which
+	 * breaks CORS requests from tools like pdsls.dev because the redirect
+	 * response lacks CORS headers.
+	 *
+	 * @param string $redirect_url  The redirect URL.
+	 * @param string $requested_url The requested URL.
+	 * @return string|false The redirect URL or false to cancel.
+	 */
+	public static function prevent_wellknown_redirect( $redirect_url, $requested_url ) {
+		if ( get_query_var( 'atproto_did_document' )
+			|| get_query_var( 'atproto_did' )
+			|| get_query_var( 'atproto_standard_publication' ) ) {
+			return false;
+		}
+
+		return $redirect_url;
 	}
 
 	/**
