@@ -33,7 +33,7 @@ class Publication extends Base {
 		$record = array(
 			'$type'       => 'site.standard.publication',
 			'url'         => home_url( '/' ),
-			'displayName' => get_bloginfo( 'name' ),
+			'name'        => get_bloginfo( 'name' ),
 			'description' => get_bloginfo( 'description' ),
 		);
 
