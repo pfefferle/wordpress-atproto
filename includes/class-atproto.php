@@ -94,6 +94,7 @@ class ATProto {
 			// Sync.
 			new Rest\Sync\Get_Repo(),
 			new Rest\Sync\Get_Blob(),
+			new Rest\Sync\Get_Latest_Commit(),
 			new Rest\Sync\List_Repos(),
 			new Rest\Sync\Subscribe_Repos(),
 			// Internal.
