@@ -10,6 +10,7 @@
 namespace ATProto\Rest\Sync;
 
 use ATProto\ATProto;
+use ATProto\Repository\Repository;
 use ATProto\Rest\XRPC_Controller;
 
 defined( 'ABSPATH' ) || exit;
@@ -68,17 +69,13 @@ class List_Repos extends XRPC_Controller {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function handle_request( \WP_REST_Request $request ) {
-		$rev = get_option( 'atproto_current_rev', '' );
-		$head = get_option( 'atproto_root_cid', '' );
+		$state = Repository::get_state();
 
 		$repo = array(
 			'did'  => ATProto::get_did(),
-			'head' => $head,
+			'head' => $state['commit'] ?? '',
+			'rev'  => $state['rev'] ?? '',
 		);
-
-		if ( ! empty( $rev ) ) {
-			$repo['rev'] = $rev;
-		}
 
 		return $this->xrpc_response( array(
 			'repos' => array( $repo ),
