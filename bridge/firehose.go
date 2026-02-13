@@ -426,18 +426,19 @@ func main() {
 
 		h.add(c)
 
-		// Send replay from cursor if requested.
-		cursor := r.URL.Query().Get("cursor")
-		if cursor != "" {
-			var cursorSeq int64
+		// Replay buffered events. If a cursor is given, replay from that
+		// point; otherwise replay everything so new subscribers (like the
+		// relay) immediately learn about the current repo state.
+		var cursorSeq int64
+		if cursor := r.URL.Query().Get("cursor"); cursor != "" {
 			fmt.Sscanf(cursor, "%d", &cursorSeq)
-			for _, frame := range rb.since(cursorSeq) {
-				if err := conn.WriteMessage(websocket.BinaryMessage, frame); err != nil {
-					log.Printf("Replay write error: %v", err)
-					h.remove(c)
-					conn.Close()
-					return
-				}
+		}
+		for _, frame := range rb.since(cursorSeq) {
+			if err := conn.WriteMessage(websocket.BinaryMessage, frame); err != nil {
+				log.Printf("Replay write error: %v", err)
+				h.remove(c)
+				conn.Close()
+				return
 			}
 		}
 
