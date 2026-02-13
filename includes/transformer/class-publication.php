@@ -34,6 +34,7 @@ class Publication extends Base {
 			'$type'       => 'site.standard.publication',
 			'url'         => home_url( '/' ),
 			'name'        => get_bloginfo( 'name' ),
+			'displayName' => get_bloginfo( 'name' ),
 			'description' => get_bloginfo( 'description' ),
 		);
 
