@@ -172,6 +172,25 @@ class Firehose {
 	}
 
 	/**
+	 * Ensure identity and account events exist in the queue.
+	 *
+	 * The relay needs these events to discover the account.
+	 * Called automatically when events are first requested.
+	 *
+	 * @return void
+	 */
+	public static function ensure_identity_events() {
+		if ( get_option( 'atproto_identity_announced', false ) ) {
+			return;
+		}
+
+		self::emit_identity( ATProto::get_handle() );
+		self::emit_account( true );
+
+		update_option( 'atproto_identity_announced', true, false );
+	}
+
+	/**
 	 * Get events from queue.
 	 *
 	 * @param int $since_seq Get events after this sequence number.
@@ -179,6 +198,9 @@ class Firehose {
 	 * @return array Array of events.
 	 */
 	public static function get_events( $since_seq = 0, $limit = 100 ) {
+		// Ensure relay can discover this account.
+		self::ensure_identity_events();
+
 		$queue  = get_option( self::OPTION_QUEUE, array() );
 		$events = array();
 
