@@ -80,6 +80,7 @@ class ATProto {
 			// Identity.
 			new Rest\Identity\Resolve_Handle(),
 			// Server.
+			new Rest\Server\Health(),
 			new Rest\Server\Describe_Server(),
 			// Repository - read.
 			new Rest\Repo\Describe_Repo(),
