@@ -7,7 +7,7 @@
 
 namespace ATProto\Handler;
 
-use ATProto\Scheduler\Comment;
+use ATProto\Federation\Comment;
 
 defined( 'ABSPATH' ) || exit;
 

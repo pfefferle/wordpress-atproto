@@ -25,10 +25,10 @@ class ATProto {
 		// Initialize identity module.
 		Identity\DID_Document::init();
 
-		// Initialize schedulers for federation.
-		Scheduler\Post::init();
-		Scheduler\Comment::init();
-		Scheduler\Relay::init();
+		// Initialize federation hooks.
+		Federation\Post::init();
+		Federation\Comment::init();
+		Federation\Relay::init();
 
 		// Initialize admin.
 		if ( is_admin() ) {

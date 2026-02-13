@@ -291,9 +291,14 @@ class Record {
 		$lang   = substr( $locale, 0, 2 );
 		$value['langs'] = array( $lang );
 
+		// Compute CID on-the-fly if not stored yet.
+		if ( empty( $cid ) ) {
+			$cid = CID::from_cbor( $value );
+		}
+
 		return array(
 			'rkey'  => $rkey ?: TID::generate(),
-			'cid'   => $cid ?: '',
+			'cid'   => $cid,
 			'value' => $value,
 		);
 	}
@@ -639,6 +644,9 @@ class Record {
 	/**
 	 * Synchronize a WordPress post to the repository.
 	 *
+	 * Computes CIDs, updates post meta, and notifies the network.
+	 * The record data lives in WordPress - no duplicate storage.
+	 *
 	 * @param \WP_Post $post The WordPress post.
 	 * @return array|false The record info or false on failure.
 	 */
@@ -650,35 +658,35 @@ class Record {
 			update_post_meta( $post->ID, self::META_TID, $rkey );
 		}
 
-		// Build the record.
+		// Build the record and compute CID.
 		$record_data = self::post_to_record( $post, 'app.bsky.feed.post' );
-		$record      = $record_data['value'];
+		$did         = ATProto::get_did();
+		$uri         = "at://{$did}/app.bsky.feed.post/{$rkey}";
 
-		// Store in repository.
-		$result = Repository::create_record( 'app.bsky.feed.post', $record, $rkey );
+		// Update post meta.
+		update_post_meta( $post->ID, self::META_CID, $record_data['cid'] );
+		update_post_meta( $post->ID, self::META_URI, $uri );
+		update_post_meta( $post->ID, self::META_COLLECTION, 'app.bsky.feed.post' );
 
-		if ( $result ) {
-			// Update post meta with CID and URI.
-			update_post_meta( $post->ID, self::META_CID, $result['cid'] );
-			update_post_meta( $post->ID, self::META_URI, $result['uri'] );
-			update_post_meta( $post->ID, self::META_COLLECTION, 'app.bsky.feed.post' );
-		}
+		// Notify the network.
+		Repository::notify_change( 'create', 'app.bsky.feed.post', $rkey, $record_data['cid'] );
 
 		// Also sync the document record.
 		$doc_rkey = get_post_meta( $post->ID, Document::META_DOCUMENT_TID, true );
 		if ( ! empty( $doc_rkey ) ) {
-			$doc_record_data = self::post_to_record( $post, 'site.standard.document' );
-			$doc_record      = $doc_record_data['value'];
+			$doc_data = self::post_to_record( $post, 'site.standard.document' );
+			$doc_uri  = "at://{$did}/site.standard.document/{$doc_rkey}";
 
-			$doc_result = Repository::create_record( 'site.standard.document', $doc_record, $doc_rkey );
+			update_post_meta( $post->ID, Document::META_DOCUMENT_CID, $doc_data['cid'] );
+			update_post_meta( $post->ID, Document::META_DOCUMENT_URI, $doc_uri );
 
-			if ( $doc_result ) {
-				update_post_meta( $post->ID, Document::META_DOCUMENT_CID, $doc_result['cid'] );
-				update_post_meta( $post->ID, Document::META_DOCUMENT_URI, $doc_result['uri'] );
-			}
+			Repository::notify_change( 'create', 'site.standard.document', $doc_rkey, $doc_data['cid'] );
 		}
 
-		return $result;
+		return array(
+			'uri' => $uri,
+			'cid' => $record_data['cid'],
+		);
 	}
 
 	/**

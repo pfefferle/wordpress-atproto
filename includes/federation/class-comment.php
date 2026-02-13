@@ -1,13 +1,13 @@
 <?php
 /**
- * Comment federation scheduler.
+ * Comment federation hooks.
  *
  * Handles WordPress comments as AT Protocol reply records.
  *
  * @package ATProto
  */
 
-namespace ATProto\Scheduler;
+namespace ATProto\Federation;
 
 use ATProto\ATProto;
 use ATProto\Repository\Record;
@@ -16,7 +16,7 @@ use ATProto\Repository\TID;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Comment scheduler class.
+ * Comment federation class.
  */
 class Comment {
 	/**
@@ -48,7 +48,7 @@ class Comment {
 	const META_REMOTE_DID = '_atproto_remote_did';
 
 	/**
-	 * Initialize the scheduler.
+	 * Initialize hooks.
 	 *
 	 * @return void
 	 */
@@ -79,13 +79,13 @@ class Comment {
 
 		// Approving a comment.
 		if ( 'approved' === $new_status && 'approved' !== $old_status ) {
-			self::schedule_create( $comment->comment_ID );
+			self::federate_create( $comment->comment_ID );
 			return;
 		}
 
 		// Unapproving a comment.
 		if ( 'approved' !== $new_status && 'approved' === $old_status ) {
-			self::schedule_delete( $comment->comment_ID );
+			self::federate_delete( $comment->comment_ID );
 			return;
 		}
 	}
@@ -109,7 +109,7 @@ class Comment {
 			return;
 		}
 
-		self::schedule_create( $comment_id );
+		self::federate_create( $comment_id );
 	}
 
 	/**
@@ -130,7 +130,12 @@ class Comment {
 			return;
 		}
 
-		self::schedule_update( $comment_id );
+		/**
+		 * Fires when a comment is updated for AT Protocol.
+		 *
+		 * @param int $comment_id The comment ID.
+		 */
+		do_action( 'atproto_comment_updated', $comment_id );
 	}
 
 	/**
@@ -146,7 +151,6 @@ class Comment {
 			return false;
 		}
 
-		// Use post scheduler's check.
 		if ( ! Post::should_federate( $post ) ) {
 			return false;
 		}
@@ -172,12 +176,12 @@ class Comment {
 	}
 
 	/**
-	 * Schedule creation of AT Protocol reply record.
+	 * Federate a newly approved comment.
 	 *
 	 * @param int $comment_id The comment ID.
 	 * @return void
 	 */
-	public static function schedule_create( $comment_id ) {
+	private static function federate_create( $comment_id ) {
 		// Generate TID if not exists.
 		$tid = get_comment_meta( $comment_id, self::META_TID, true );
 		if ( empty( $tid ) ) {
@@ -203,27 +207,12 @@ class Comment {
 	}
 
 	/**
-	 * Schedule update of AT Protocol reply record.
+	 * Federate a comment deletion (unapproval).
 	 *
 	 * @param int $comment_id The comment ID.
 	 * @return void
 	 */
-	public static function schedule_update( $comment_id ) {
-		/**
-		 * Fires when a comment is updated for AT Protocol.
-		 *
-		 * @param int $comment_id The comment ID.
-		 */
-		do_action( 'atproto_comment_updated', $comment_id );
-	}
-
-	/**
-	 * Schedule deletion of AT Protocol reply record.
-	 *
-	 * @param int $comment_id The comment ID.
-	 * @return void
-	 */
-	public static function schedule_delete( $comment_id ) {
+	private static function federate_delete( $comment_id ) {
 		$tid = get_comment_meta( $comment_id, self::META_TID, true );
 
 		/**
@@ -269,7 +258,7 @@ class Comment {
 		if ( $comment->comment_parent ) {
 			$parent_tid = get_comment_meta( $comment->comment_parent, self::META_TID, true );
 			if ( $parent_tid ) {
-				$parent_uri           = 'at://' . ATProto::get_did() . '/app.bsky.feed.post/' . $parent_tid;
+				$parent_uri                 = 'at://' . ATProto::get_did() . '/app.bsky.feed.post/' . $parent_tid;
 				$reply['parent']['uri'] = $parent_uri;
 			}
 		}

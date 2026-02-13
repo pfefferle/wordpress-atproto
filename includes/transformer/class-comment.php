@@ -10,7 +10,7 @@ namespace ATProto\Transformer;
 use ATProto\ATProto;
 use ATProto\Repository\TID;
 use ATProto\Repository\Record;
-use ATProto\Scheduler\Comment as CommentScheduler;
+use ATProto\Federation\Comment as CommentFederation;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -71,11 +71,11 @@ class Comment extends Base {
 	 * @return string
 	 */
 	public function get_rkey() {
-		$rkey = get_comment_meta( $this->object->comment_ID, CommentScheduler::META_TID, true );
+		$rkey = get_comment_meta( $this->object->comment_ID, CommentFederation::META_TID, true );
 
 		if ( empty( $rkey ) ) {
 			$rkey = TID::generate();
-			update_comment_meta( $this->object->comment_ID, CommentScheduler::META_TID, $rkey );
+			update_comment_meta( $this->object->comment_ID, CommentFederation::META_TID, $rkey );
 		}
 
 		return $rkey;
@@ -124,9 +124,9 @@ class Comment extends Base {
 
 		// If this is a reply to another comment, update parent.
 		if ( $this->object->comment_parent ) {
-			$parent_tid = get_comment_meta( $this->object->comment_parent, CommentScheduler::META_TID, true );
+			$parent_tid = get_comment_meta( $this->object->comment_parent, CommentFederation::META_TID, true );
 			$parent_cid = get_comment_meta( $this->object->comment_parent, '_atproto_cid', true );
-			$parent_uri = get_comment_meta( $this->object->comment_parent, CommentScheduler::META_URI, true );
+			$parent_uri = get_comment_meta( $this->object->comment_parent, CommentFederation::META_URI, true );
 
 			if ( $parent_tid ) {
 				if ( empty( $parent_uri ) ) {

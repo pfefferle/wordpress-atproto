@@ -7,7 +7,7 @@
  * @package ATProto
  */
 
-namespace ATProto\Scheduler;
+namespace ATProto\Federation;
 
 use ATProto\ATProto;
 use ATProto\Handler\Handler;
@@ -49,12 +49,11 @@ class Relay {
 	const DEFAULT_RELAY = 'https://bsky.network';
 
 	/**
-	 * Initialize the relay scheduler.
+	 * Initialize the relay polling.
 	 *
 	 * @return void
 	 */
 	public static function init() {
-		// Schedule polling cron.
 		add_action( 'atproto_relay_poll', array( self::class, 'poll' ) );
 
 		if ( ! wp_next_scheduled( 'atproto_relay_poll' ) ) {
@@ -195,7 +194,7 @@ class Relay {
 		}
 
 		// Update last sync.
-		$subscribed         = get_option( self::OPTION_SUBSCRIBED, array() );
+		$subscribed                     = get_option( self::OPTION_SUBSCRIBED, array() );
 		$subscribed[ $did ]['last_sync'] = current_time( 'mysql', true );
 		update_option( self::OPTION_SUBSCRIBED, $subscribed, false );
 
@@ -222,18 +221,24 @@ class Relay {
 
 		foreach ( $collections as $collection ) {
 			$url = trailingslashit( $pds_url ) . 'xrpc/com.atproto.repo.listRecords';
-			$url = add_query_arg( array(
-				'repo'       => $did,
-				'collection' => $collection,
-				'limit'      => 50,
-			), $url );
-
-			$response = wp_remote_get( $url, array(
-				'timeout' => 30,
-				'headers' => array(
-					'Accept' => 'application/json',
+			$url = add_query_arg(
+				array(
+					'repo'       => $did,
+					'collection' => $collection,
+					'limit'      => 50,
 				),
-			) );
+				$url
+			);
+
+			$response = wp_remote_get(
+				$url,
+				array(
+					'timeout' => 30,
+					'headers' => array(
+						'Accept' => 'application/json',
+					),
+				)
+			);
 
 			if ( is_wp_error( $response ) ) {
 				continue;
