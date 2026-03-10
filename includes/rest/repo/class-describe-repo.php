@@ -78,6 +78,7 @@ class Describe_Repo extends XRPC_Controller {
 
 		// Get available collections.
 		$collections = array(
+			'app.bsky.actor.profile',
 			'app.bsky.feed.post',
 			'app.bsky.feed.like',
 			'app.bsky.feed.repost',
