@@ -248,12 +248,60 @@ class Repository {
 	 */
 	public static function notify_change( $action, $collection, $rkey, $cid = null ) {
 		// Rebuild commit with a new revision.
-		$rev = TID::generate();
-		self::rebuild_commit( $rev );
+		$rev   = TID::generate();
+		$build = self::rebuild_commit( $rev );
 
-		// Emit firehose event (state now has the correct commit CID).
+		// Build a minimal CAR file containing the commit, MST nodes,
+		// and the affected record so the relay can index inline.
+		$blocks_car = self::build_blocks_car( $build, $collection, $rkey, $cid );
+
+		// Emit firehose event with inline blocks.
 		$op = Firehose::create_op( $action, $collection, $rkey, $cid );
-		Firehose::emit_commit( array( $op ) );
+		Firehose::emit_commit( array( $op ), $blocks_car );
+	}
+
+	/**
+	 * Build a minimal CAR file for firehose commit blocks.
+	 *
+	 * Contains the signed commit, all MST nodes, and the affected record.
+	 *
+	 * @param array       $build      The rebuild_commit() result.
+	 * @param string      $collection The affected collection.
+	 * @param string      $rkey       The affected record key.
+	 * @param string|null $cid        The record CID (null for deletes).
+	 * @return string The CAR file bytes.
+	 */
+	private static function build_blocks_car( $build, $collection, $rkey, $cid = null ) {
+		$state = $build['state'];
+		$tree  = $build['tree'];
+
+		$commit_cid  = $state['commit'];
+		$commit_data = base64_decode( $state['commit_data'] );
+
+		// CAR v1 header.
+		$header      = array(
+			'version' => 1,
+			'roots'   => array(
+				array( '$link' => $commit_cid ),
+			),
+		);
+		$header_cbor = CBOR::encode( $header );
+		$car         = self::encode_varint( strlen( $header_cbor ) ) . $header_cbor;
+
+		// Add commit block.
+		$car .= self::encode_car_block( $commit_cid, $commit_data );
+
+		// Add all MST node blocks (proof path).
+		foreach ( $tree['blocks'] as $block_cid => $data ) {
+			$car .= self::encode_car_block( $block_cid, $data );
+		}
+
+		// Add the affected record block (skip for deletes).
+		if ( $cid && isset( $build['record_blocks'][ $cid ] ) ) {
+			$car .= self::encode_car_block( $cid, $build['record_blocks'][ $cid ] );
+		}
+
+		return $car;
 	}
 
 	/**

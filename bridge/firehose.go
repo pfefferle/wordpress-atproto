@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base32"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -16,6 +17,14 @@ import (
 	"github.com/fxamacker/cbor/v2"
 	"github.com/gorilla/websocket"
 )
+
+// base64Decode tries standard then URL-safe base64.
+func base64Decode(s string) ([]byte, error) {
+	if raw, err := base64.StdEncoding.DecodeString(s); err == nil {
+		return raw, nil
+	}
+	return base64.URLEncoding.DecodeString(s)
+}
 
 // Event represents a firehose event from WordPress.
 type Event struct {
@@ -39,9 +48,21 @@ type CIDLink struct {
 	Link string `json:"$link"`
 }
 
-// BytesWrapper represents AT Protocol bytes.
+// BytesWrapper represents AT Protocol bytes (base64-encoded).
 type BytesWrapper struct {
 	Bytes string `json:"$bytes"`
+}
+
+// Raw returns the decoded bytes.
+func (b *BytesWrapper) Raw() []byte {
+	if b == nil || b.Bytes == "" {
+		return []byte{}
+	}
+	raw, err := base64Decode(b.Bytes)
+	if err != nil {
+		return []byte{}
+	}
+	return raw
 }
 
 // Op represents a commit operation.
@@ -176,6 +197,14 @@ func eventToFrame(ev Event) ([]byte, error) {
 			commitLink = ev.Commit.Link
 		}
 
+		var blocks []byte
+		if ev.Blocks != nil {
+			blocks = ev.Blocks.Raw()
+		}
+		if blocks == nil {
+			blocks = []byte{}
+		}
+
 		body := cborCommitEvent{
 			Seq:    ev.Seq,
 			Rebase: false,
@@ -184,7 +213,7 @@ func eventToFrame(ev Event) ([]byte, error) {
 			Commit: cidToTag(commitLink),
 			Rev:    ev.Rev,
 			Since:  nil,
-			Blocks: []byte{},
+			Blocks: blocks,
 			Ops:    ops,
 			Blobs:  []cbor.Tag{},
 			Time:   ev.Time,

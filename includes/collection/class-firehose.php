@@ -43,10 +43,11 @@ class Firehose {
 	/**
 	 * Emit a commit event.
 	 *
-	 * @param array $operations Array of operations.
+	 * @param array  $operations Array of operations.
+	 * @param string $blocks_car Optional CAR file bytes for inline blocks.
 	 * @return int The sequence number.
 	 */
-	public static function emit_commit( $operations ) {
+	public static function emit_commit( $operations, $blocks_car = '' ) {
 		$seq = self::next_seq();
 
 		$state = Repository::get_state();
@@ -58,8 +59,8 @@ class Firehose {
 			'repo'   => ATProto::get_did(),
 			'rev'    => $state['rev'],
 			'commit' => array( '$link' => $state['commit'] ),
-			'tooBig' => true,
-			'blocks' => array( '$bytes' => '' ),
+			'tooBig' => empty( $blocks_car ),
+			'blocks' => array( '$bytes' => base64_encode( $blocks_car ) ),
 			'ops'    => $operations,
 		);
 
