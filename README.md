@@ -1,7 +1,7 @@
 > [!CAUTION]
 > This is an early experimental effort to explore running an ATProto PDS on WordPress. It’s not functional yet, but contributions are very welcome.
 
-# AT Protocol
+# AT Protocol (PDS)
 
 - Contributors: pfefferle
 - Tags: atproto, bluesky, federation, fediverse, decentralized
