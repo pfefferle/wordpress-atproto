@@ -1,5 +1,5 @@
 > [!CAUTION]
-> This is still an experimental effort to explore whether ATProto can be implemented in WordPress. It’s not working yet, but contributions are very welcome.
+> This is an early experimental effort to explore running an ATProto PDS on WordPress. It’s not functional yet, but contributions are very welcome.
 
 # AT Protocol
 
