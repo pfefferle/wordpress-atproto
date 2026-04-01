@@ -38,7 +38,7 @@ class DID_Document {
 		$did         = ATProto::get_did();
 		$handle      = ATProto::get_handle();
 		$public_key  = Crypto::get_public_key_multibase();
-		$pds_url     = home_url();
+		$pds_url     = self::get_service_endpoint();
 
 		$document = array(
 			'@context'           => array(
@@ -99,10 +99,35 @@ class DID_Document {
 	/**
 	 * Get the PDS service endpoint.
 	 *
+	 * AT Protocol requires only scheme + hostname + optional port,
+	 * with no path, query, or fragment components.
+	 *
+	 * @return string The PDS endpoint URL (scheme + host + optional port).
+	 */
+	public static function get_service_endpoint() {
+		$url    = home_url();
+		$scheme = wp_parse_url( $url, PHP_URL_SCHEME ) ?: 'https';
+		$host   = wp_parse_url( $url, PHP_URL_HOST );
+		$port   = wp_parse_url( $url, PHP_URL_PORT );
+
+		$endpoint = $scheme . '://' . $host;
+
+		if ( $port ) {
+			$endpoint .= ':' . $port;
+		}
+
+		return $endpoint;
+	}
+
+	/**
+	 * Get the PDS service endpoint.
+	 *
+	 * @deprecated Use get_service_endpoint() instead.
+	 *
 	 * @return string The PDS endpoint URL.
 	 */
 	public static function get_pds_endpoint() {
-		return home_url();
+		return self::get_service_endpoint();
 	}
 
 	/**

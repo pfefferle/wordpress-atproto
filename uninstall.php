@@ -21,12 +21,23 @@ delete_option( 'atproto_root_cid' );
 
 // Delete repository state options.
 delete_option( 'atproto_repo_state' );
+delete_option( 'atproto_followers' );
+delete_option( 'atproto_follower_count' );
+
+// Delete legacy options (no longer used).
 delete_option( 'atproto_repo_commits' );
 delete_option( 'atproto_records' );
 delete_option( 'atproto_mst_nodes' );
 delete_option( 'atproto_mst_entries' );
-delete_option( 'atproto_followers' );
-delete_option( 'atproto_follower_count' );
+
+// Delete firehose options.
+delete_option( 'atproto_firehose_queue' );
+delete_option( 'atproto_firehose_seq' );
+
+// Delete standard.site options.
+delete_option( 'atproto_publication_tid' );
+delete_option( 'atproto_publication_subscribers' );
+delete_option( 'atproto_publication_subscriber_count' );
 
 // Delete post meta.
 global $wpdb;
@@ -43,6 +54,7 @@ $wpdb->query(
 // Clear any scheduled hooks.
 wp_clear_scheduled_hook( 'atproto_relay_sync' );
 wp_clear_scheduled_hook( 'atproto_cleanup' );
+wp_clear_scheduled_hook( 'atproto_federate_post' );
 
 // Flush rewrite rules.
 flush_rewrite_rules();

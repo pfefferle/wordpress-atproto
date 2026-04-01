@@ -43,19 +43,25 @@ class Firehose {
 	/**
 	 * Emit a commit event.
 	 *
-	 * @param array $operations Array of operations.
+	 * @param array  $operations Array of operations.
+	 * @param string $blocks_car Optional CAR file bytes for inline blocks.
 	 * @return int The sequence number.
 	 */
-	public static function emit_commit( $operations ) {
+	public static function emit_commit( $operations, $blocks_car = '' ) {
 		$seq = self::next_seq();
 
+		$state = Repository::get_state();
+
 		$event = array(
-			'$type' => '#commit',
-			'seq'   => $seq,
-			'time'  => gmdate( 'Y-m-d\TH:i:s.000\Z' ),
-			'repo'  => ATProto::get_did(),
-			'rev'   => Repository::get_rev(),
-			'ops'   => $operations,
+			'$type'  => '#commit',
+			'seq'    => $seq,
+			'time'   => gmdate( 'Y-m-d\TH:i:s.000\Z' ),
+			'repo'   => ATProto::get_did(),
+			'rev'    => $state['rev'],
+			'commit' => array( '$link' => $state['commit'] ),
+			'tooBig' => empty( $blocks_car ),
+			'blocks' => array( '$bytes' => base64_encode( $blocks_car ) ),
+			'ops'    => $operations,
 		);
 
 		self::queue_event( $event );
@@ -167,6 +173,25 @@ class Firehose {
 	}
 
 	/**
+	 * Ensure identity and account events exist in the queue.
+	 *
+	 * The relay needs these events to discover the account.
+	 * Called automatically when events are first requested.
+	 *
+	 * @return void
+	 */
+	public static function ensure_identity_events() {
+		if ( get_option( 'atproto_identity_announced', false ) ) {
+			return;
+		}
+
+		self::emit_identity( ATProto::get_handle() );
+		self::emit_account( true );
+
+		update_option( 'atproto_identity_announced', true, false );
+	}
+
+	/**
 	 * Get events from queue.
 	 *
 	 * @param int $since_seq Get events after this sequence number.
@@ -174,6 +199,9 @@ class Firehose {
 	 * @return array Array of events.
 	 */
 	public static function get_events( $since_seq = 0, $limit = 100 ) {
+		// Ensure relay can discover this account.
+		self::ensure_identity_events();
+
 		$queue  = get_option( self::OPTION_QUEUE, array() );
 		$events = array();
 

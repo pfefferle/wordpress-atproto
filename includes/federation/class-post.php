@@ -1,38 +1,35 @@
 <?php
 /**
- * Post federation scheduler.
+ * Post federation hooks.
  *
- * Handles scheduling and processing of post federation to AT Protocol.
+ * Handles federation of posts to AT Protocol on publish, update, and delete.
+ * Runs directly on WordPress hooks - no WP-Cron scheduling needed.
  *
  * @package ATProto
  */
 
-namespace ATProto\Scheduler;
+namespace ATProto\Federation;
 
 use ATProto\ATProto;
 use ATProto\Repository\Record;
+use ATProto\Repository\Repository;
 use ATProto\Repository\TID;
+use ATProto\Transformer\Document;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Post scheduler class.
+ * Post federation class.
  */
 class Post {
 	/**
-	 * Initialize the scheduler.
+	 * Initialize hooks.
 	 *
 	 * @return void
 	 */
 	public static function init() {
-		// Hook into post status transitions.
 		add_action( 'transition_post_status', array( self::class, 'handle_status_change' ), 10, 3 );
-
-		// Hook into post updates.
 		add_action( 'post_updated', array( self::class, 'handle_update' ), 10, 3 );
-
-		// Register scheduled action.
-		add_action( 'atproto_federate_post', array( self::class, 'process_federation' ) );
 	}
 
 	/**
@@ -44,20 +41,19 @@ class Post {
 	 * @return void
 	 */
 	public static function handle_status_change( $new_status, $old_status, $post ) {
-		// Check if this post type should be federated.
 		if ( ! self::should_federate( $post ) ) {
 			return;
 		}
 
 		// Publishing a post.
 		if ( 'publish' === $new_status && 'publish' !== $old_status ) {
-			self::schedule_create( $post->ID );
+			self::federate_create( $post );
 			return;
 		}
 
 		// Unpublishing a post.
 		if ( 'publish' !== $new_status && 'publish' === $old_status ) {
-			self::schedule_delete( $post->ID );
+			self::federate_delete( $post->ID );
 			return;
 		}
 	}
@@ -71,23 +67,20 @@ class Post {
 	 * @return void
 	 */
 	public static function handle_update( $post_id, $post_after, $post_before ) {
-		// Only handle published posts.
 		if ( 'publish' !== $post_after->post_status ) {
 			return;
 		}
 
-		// Check if this post type should be federated.
 		if ( ! self::should_federate( $post_after ) ) {
 			return;
 		}
 
-		// Check if content actually changed.
 		if ( $post_after->post_content === $post_before->post_content &&
 			$post_after->post_title === $post_before->post_title ) {
 			return;
 		}
 
-		self::schedule_update( $post_id );
+		self::federate_update( $post_after );
 	}
 
 	/**
@@ -97,14 +90,12 @@ class Post {
 	 * @return bool True if should be federated.
 	 */
 	public static function should_federate( $post ) {
-		// Get enabled post types.
 		$enabled_types = get_option( 'atproto_enabled_post_types', array( 'post' ) );
 
 		if ( ! in_array( $post->post_type, $enabled_types, true ) ) {
 			return false;
 		}
 
-		// Check for password protection.
 		if ( ! empty( $post->post_password ) ) {
 			return false;
 		}
@@ -119,65 +110,83 @@ class Post {
 	}
 
 	/**
-	 * Schedule creation of AT Protocol record.
+	 * Federate a newly published post.
 	 *
-	 * @param int $post_id The post ID.
+	 * Generates TIDs, syncs to the repository, and notifies the network.
+	 *
+	 * @param \WP_Post $post The post object.
 	 * @return void
 	 */
-	public static function schedule_create( $post_id ) {
+	private static function federate_create( $post ) {
 		// Generate TID if not exists.
-		$tid = get_post_meta( $post_id, Record::META_TID, true );
+		$tid = get_post_meta( $post->ID, Record::META_TID, true );
 		if ( empty( $tid ) ) {
 			$tid = TID::generate();
-			update_post_meta( $post_id, Record::META_TID, $tid );
+			update_post_meta( $post->ID, Record::META_TID, $tid );
 		}
 
-		// Set collection.
-		update_post_meta( $post_id, Record::META_COLLECTION, 'app.bsky.feed.post' );
+		// Generate document TID.
+		$doc_tid = get_post_meta( $post->ID, Document::META_DOCUMENT_TID, true );
+		if ( empty( $doc_tid ) ) {
+			$doc_tid = TID::generate();
+			update_post_meta( $post->ID, Document::META_DOCUMENT_TID, $doc_tid );
+		}
 
-		// Generate AT URI.
-		$uri = 'at://' . ATProto::get_did() . '/app.bsky.feed.post/' . $tid;
-		update_post_meta( $post_id, Record::META_URI, $uri );
+		// Sync the post (computes CIDs, updates meta, notifies network).
+		Record::sync_post( $post );
 
 		/**
-		 * Fires when a post is created for AT Protocol.
+		 * Fires when a post is federated to AT Protocol.
 		 *
 		 * @param int    $post_id The post ID.
 		 * @param string $tid     The AT Protocol TID.
-		 * @param string $uri     The AT Protocol URI.
 		 */
-		do_action( 'atproto_post_created', $post_id, $tid, $uri );
-
-		// For immediate federation, we'd schedule here.
-		// For now, records are created on-demand when queried.
+		do_action( 'atproto_post_created', $post->ID, $tid );
 	}
 
 	/**
-	 * Schedule update of AT Protocol record.
+	 * Federate a post update.
 	 *
-	 * @param int $post_id The post ID.
+	 * Clears cached CIDs and re-syncs.
+	 *
+	 * @param \WP_Post $post The post object.
 	 * @return void
 	 */
-	public static function schedule_update( $post_id ) {
-		// Clear CID to force regeneration.
-		delete_post_meta( $post_id, Record::META_CID );
+	private static function federate_update( $post ) {
+		// Clear cached CIDs so they get recomputed.
+		delete_post_meta( $post->ID, Record::META_CID );
+		delete_post_meta( $post->ID, Document::META_DOCUMENT_CID );
+
+		// Re-sync the post as an update.
+		Record::sync_post( $post, 'update' );
 
 		/**
 		 * Fires when a post is updated for AT Protocol.
 		 *
 		 * @param int $post_id The post ID.
 		 */
-		do_action( 'atproto_post_updated', $post_id );
+		do_action( 'atproto_post_updated', $post->ID );
 	}
 
 	/**
-	 * Schedule deletion of AT Protocol record.
+	 * Federate a post deletion (unpublish).
+	 *
+	 * Notifies the network and cleans up meta.
 	 *
 	 * @param int $post_id The post ID.
 	 * @return void
 	 */
-	public static function schedule_delete( $post_id ) {
-		$tid = get_post_meta( $post_id, Record::META_TID, true );
+	private static function federate_delete( $post_id ) {
+		$tid     = get_post_meta( $post_id, Record::META_TID, true );
+		$doc_tid = get_post_meta( $post_id, Document::META_DOCUMENT_TID, true );
+
+		// Notify the network.
+		if ( ! empty( $tid ) ) {
+			Repository::notify_change( 'delete', 'app.bsky.feed.post', $tid );
+		}
+		if ( ! empty( $doc_tid ) ) {
+			Repository::notify_change( 'delete', 'site.standard.document', $doc_tid );
+		}
 
 		/**
 		 * Fires when a post is deleted from AT Protocol.
@@ -192,30 +201,8 @@ class Post {
 		delete_post_meta( $post_id, Record::META_CID );
 		delete_post_meta( $post_id, Record::META_URI );
 		delete_post_meta( $post_id, Record::META_COLLECTION );
-	}
-
-	/**
-	 * Process federation for a post.
-	 *
-	 * @param int $post_id The post ID.
-	 * @return void
-	 */
-	public static function process_federation( $post_id ) {
-		$post = get_post( $post_id );
-
-		if ( ! $post || ! self::should_federate( $post ) ) {
-			return;
-		}
-
-		// Convert post to record.
-		$record = Record::post_to_record( $post, 'app.bsky.feed.post' );
-
-		/**
-		 * Fires after a post is processed for federation.
-		 *
-		 * @param int   $post_id The post ID.
-		 * @param array $record  The AT Protocol record.
-		 */
-		do_action( 'atproto_post_federated', $post_id, $record );
+		delete_post_meta( $post_id, Document::META_DOCUMENT_TID );
+		delete_post_meta( $post_id, Document::META_DOCUMENT_URI );
+		delete_post_meta( $post_id, Document::META_DOCUMENT_CID );
 	}
 }

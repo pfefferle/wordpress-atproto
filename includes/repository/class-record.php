@@ -8,6 +8,8 @@
 namespace ATProto\Repository;
 
 use ATProto\ATProto;
+use ATProto\Transformer\Document;
+use ATProto\Transformer\Publication;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -59,6 +61,16 @@ class Record {
 		// For app.bsky.feed.post, look up WordPress posts.
 		if ( 'app.bsky.feed.post' === $collection ) {
 			return self::get_post_record( $rkey );
+		}
+
+		// For site.standard.publication, generate from site settings.
+		if ( 'site.standard.publication' === $collection ) {
+			return self::get_publication_record( $rkey );
+		}
+
+		// For site.standard.document, look up WordPress posts by document TID.
+		if ( 'site.standard.document' === $collection ) {
+			return self::get_document_record( $rkey );
 		}
 
 		// For other collections, check post meta.
@@ -164,6 +176,58 @@ class Record {
 	}
 
 	/**
+	 * Get the publication record.
+	 *
+	 * @param string $rkey The record key (TID).
+	 * @return array|null The record or null if not found.
+	 */
+	private static function get_publication_record( $rkey ) {
+		// Validate rkey matches our stored publication TID.
+		$stored_tid = get_option( Publication::OPTION_TID );
+		if ( $stored_tid && $rkey !== $stored_tid ) {
+			return null;
+		}
+
+		$transformer = new Publication( null );
+		$value       = $transformer->transform();
+		$cid         = CID::from_cbor( $value );
+
+		return array(
+			'rkey'  => $transformer->get_rkey(),
+			'cid'   => $cid,
+			'value' => $value,
+		);
+	}
+
+	/**
+	 * Get a document record by TID.
+	 *
+	 * @param string $rkey The record key (TID).
+	 * @return array|null The record or null if not found.
+	 */
+	private static function get_document_record( $rkey ) {
+		$args = array(
+			'post_type'      => get_option( 'atproto_enabled_post_types', array( 'post' ) ),
+			'post_status'    => 'publish',
+			'posts_per_page' => 1,
+			'meta_query'     => array(
+				array(
+					'key'   => Document::META_DOCUMENT_TID,
+					'value' => $rkey,
+				),
+			),
+		);
+
+		$posts = get_posts( $args );
+
+		if ( empty( $posts ) ) {
+			return null;
+		}
+
+		return self::post_to_record( $posts[0], 'site.standard.document' );
+	}
+
+	/**
 	 * Convert a WordPress post to an AT Protocol record.
 	 *
 	 * @param \WP_Post $post       The WordPress post.
@@ -171,6 +235,25 @@ class Record {
 	 * @return array The AT Protocol record.
 	 */
 	public static function post_to_record( $post, $collection = 'app.bsky.feed.post' ) {
+		// Handle site.standard.document via the Document transformer.
+		if ( 'site.standard.document' === $collection ) {
+			$transformer = new \ATProto\Transformer\Document( $post );
+			$value       = $transformer->transform();
+			$rkey        = $transformer->get_rkey();
+			$cid         = get_post_meta( $post->ID, Document::META_DOCUMENT_CID, true );
+
+			if ( empty( $cid ) ) {
+				$cid = CID::from_cbor( $value );
+				update_post_meta( $post->ID, Document::META_DOCUMENT_CID, $cid );
+			}
+
+			return array(
+				'rkey'  => $rkey,
+				'cid'   => $cid,
+				'value' => $value,
+			);
+		}
+
 		$rkey = get_post_meta( $post->ID, self::META_TID, true );
 		$cid  = get_post_meta( $post->ID, self::META_CID, true );
 
@@ -208,9 +291,14 @@ class Record {
 		$lang   = substr( $locale, 0, 2 );
 		$value['langs'] = array( $lang );
 
+		// Compute CID on-the-fly if not stored yet.
+		if ( empty( $cid ) ) {
+			$cid = CID::from_cbor( $value );
+		}
+
 		return array(
 			'rkey'  => $rkey ?: TID::generate(),
-			'cid'   => $cid ?: '',
+			'cid'   => $cid,
 			'value' => $value,
 		);
 	}
@@ -447,6 +535,69 @@ class Record {
 			);
 		}
 
+		// For site.standard.publication, return the single publication record.
+		if ( 'site.standard.publication' === $collection ) {
+			$publication = self::get_publication_record( get_option( Publication::OPTION_TID, '' ) );
+
+			if ( $publication ) {
+				return array(
+					'records' => array( $publication ),
+					'cursor'  => '',
+				);
+			}
+
+			return array(
+				'records' => array(),
+				'cursor'  => '',
+			);
+		}
+
+		// For site.standard.document, list posts with document TIDs.
+		if ( 'site.standard.document' === $collection ) {
+			$args = array(
+				'post_type'      => get_option( 'atproto_enabled_post_types', array( 'post' ) ),
+				'post_status'    => 'publish',
+				'posts_per_page' => $limit + 1,
+				'orderby'        => 'date',
+				'order'          => $reverse ? 'ASC' : 'DESC',
+				'meta_query'     => array(
+					array(
+						'key'     => Document::META_DOCUMENT_TID,
+						'compare' => 'EXISTS',
+					),
+				),
+			);
+
+			if ( ! empty( $cursor ) ) {
+				$cursor_post = get_post( absint( $cursor ) );
+				if ( $cursor_post ) {
+					$args['date_query'] = array(
+						array(
+							'before'    => $cursor_post->post_date,
+							'inclusive' => false,
+						),
+					);
+				}
+			}
+
+			$posts = get_posts( $args );
+
+			$next_cursor = '';
+			if ( count( $posts ) > $limit ) {
+				$last_post   = array_pop( $posts );
+				$next_cursor = (string) $last_post->ID;
+			}
+
+			foreach ( $posts as $post ) {
+				$records[] = self::post_to_record( $post, 'site.standard.document' );
+			}
+
+			return array(
+				'records' => $records,
+				'cursor'  => $next_cursor,
+			);
+		}
+
 		// For other collections, return empty for now.
 		return array(
 			'records' => array(),
@@ -493,10 +644,14 @@ class Record {
 	/**
 	 * Synchronize a WordPress post to the repository.
 	 *
-	 * @param \WP_Post $post The WordPress post.
+	 * Computes CIDs, updates post meta, and notifies the network.
+	 * The record data lives in WordPress - no duplicate storage.
+	 *
+	 * @param \WP_Post $post   The WordPress post.
+	 * @param string   $action The action: 'create' or 'update'.
 	 * @return array|false The record info or false on failure.
 	 */
-	public static function sync_post( $post ) {
+	public static function sync_post( $post, $action = 'create' ) {
 		// Get or generate TID.
 		$rkey = get_post_meta( $post->ID, self::META_TID, true );
 		if ( empty( $rkey ) ) {
@@ -504,21 +659,35 @@ class Record {
 			update_post_meta( $post->ID, self::META_TID, $rkey );
 		}
 
-		// Build the record.
+		// Build the record and compute CID.
 		$record_data = self::post_to_record( $post, 'app.bsky.feed.post' );
-		$record      = $record_data['value'];
+		$did         = ATProto::get_did();
+		$uri         = "at://{$did}/app.bsky.feed.post/{$rkey}";
 
-		// Store in repository.
-		$result = Repository::create_record( 'app.bsky.feed.post', $record, $rkey );
+		// Update post meta.
+		update_post_meta( $post->ID, self::META_CID, $record_data['cid'] );
+		update_post_meta( $post->ID, self::META_URI, $uri );
+		update_post_meta( $post->ID, self::META_COLLECTION, 'app.bsky.feed.post' );
 
-		if ( $result ) {
-			// Update post meta with CID and URI.
-			update_post_meta( $post->ID, self::META_CID, $result['cid'] );
-			update_post_meta( $post->ID, self::META_URI, $result['uri'] );
-			update_post_meta( $post->ID, self::META_COLLECTION, 'app.bsky.feed.post' );
+		// Notify the network.
+		Repository::notify_change( $action, 'app.bsky.feed.post', $rkey, $record_data['cid'] );
+
+		// Also sync the document record.
+		$doc_rkey = get_post_meta( $post->ID, Document::META_DOCUMENT_TID, true );
+		if ( ! empty( $doc_rkey ) ) {
+			$doc_data = self::post_to_record( $post, 'site.standard.document' );
+			$doc_uri  = "at://{$did}/site.standard.document/{$doc_rkey}";
+
+			update_post_meta( $post->ID, Document::META_DOCUMENT_CID, $doc_data['cid'] );
+			update_post_meta( $post->ID, Document::META_DOCUMENT_URI, $doc_uri );
+
+			Repository::notify_change( $action, 'site.standard.document', $doc_rkey, $doc_data['cid'] );
 		}
 
-		return $result;
+		return array(
+			'uri' => $uri,
+			'cid' => $record_data['cid'],
+		);
 	}
 
 	/**

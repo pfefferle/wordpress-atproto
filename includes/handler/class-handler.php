@@ -82,6 +82,9 @@ abstract class Handler {
 				}
 				return null; // Regular posts not handled.
 
+			case 'site.standard.graph.subscription':
+				return new Subscription( $record, $did, $handle );
+
 			default:
 				return null;
 		}
@@ -161,7 +164,7 @@ abstract class Handler {
 		$comment_id = $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT comment_id FROM {$wpdb->commentmeta} WHERE meta_key = %s AND meta_value = %s",
-				\ATProto\Scheduler\Comment::META_TID,
+				\ATProto\Federation\Comment::META_TID,
 				$parsed['rkey']
 			)
 		);

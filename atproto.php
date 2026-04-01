@@ -63,6 +63,11 @@ function activate() {
 	// Generate cryptographic keys on activation.
 	Identity\Crypto::generate_keys();
 
+	// Generate publication TID if not exists.
+	if ( ! get_option( Transformer\Publication::OPTION_TID ) ) {
+		update_option( Transformer\Publication::OPTION_TID, Repository\TID::generate(), false );
+	}
+
 	// Flush rewrite rules for DID document endpoint.
 	flush_rewrite_rules();
 }

@@ -30,6 +30,13 @@ class Crypto {
 	const P256_MULTICODEC = "\x80\x24";
 
 	/**
+	 * P-256 curve order (n) as a hex string.
+	 *
+	 * @var string
+	 */
+	const P256_ORDER = 'FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551';
+
+	/**
 	 * Base58btc alphabet for multibase encoding.
 	 *
 	 * @var string
@@ -244,7 +251,32 @@ class Crypto {
 		$r = str_pad( $r, 32, "\x00", STR_PAD_LEFT );
 		$s = str_pad( $s, 32, "\x00", STR_PAD_LEFT );
 
+		// Enforce low-S as required by AT Protocol.
+		$s = self::normalize_s( $s );
+
 		return $r . $s;
+	}
+
+	/**
+	 * Normalize S value to low-S form as required by AT Protocol.
+	 *
+	 * If S > curve_order / 2, replace S with curve_order - S.
+	 *
+	 * @param string $s The 32-byte S value.
+	 * @return string The normalized 32-byte S value.
+	 */
+	private static function normalize_s( $s ) {
+		$s_int     = gmp_import( $s, 1, GMP_MSW_FIRST | GMP_BIG_ENDIAN );
+		$order     = gmp_init( self::P256_ORDER, 16 );
+		$half_order = gmp_div_q( $order, 2 );
+
+		if ( gmp_cmp( $s_int, $half_order ) > 0 ) {
+			$s_int = gmp_sub( $order, $s_int );
+			$s     = gmp_export( $s_int, 1, GMP_MSW_FIRST | GMP_BIG_ENDIAN );
+			$s     = str_pad( $s, 32, "\x00", STR_PAD_LEFT );
+		}
+
+		return $s;
 	}
 
 	/**

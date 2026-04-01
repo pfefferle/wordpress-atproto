@@ -32,22 +32,11 @@ console.log(`URL: ${WP_URL}`);
 console.log(`DID: ${did}`);
 console.log(`Port: ${PORT}\n`);
 
-// Varint encoding
-function varint(n) {
-  const bytes = [];
-  while (n >= 0x80) {
-    bytes.push((n & 0x7f) | 0x80);
-    n >>>= 7;
-  }
-  bytes.push(n);
-  return Buffer.from(bytes);
-}
-
-// Build frame
+// Build frame: two concatenated CBOR objects per AT Protocol event stream spec.
 function buildFrame(type, body) {
   const header = cbor.encode({ op: 1, t: type });
   const payload = cbor.encode(body);
-  return Buffer.concat([varint(header.length), header, payload]);
+  return Buffer.concat([header, payload]);
 }
 
 let seq = Date.now();

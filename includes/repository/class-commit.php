@@ -95,8 +95,10 @@ class Commit {
 		$signature = base64_decode( $commit['sig']['$bytes'], true );
 
 		// Build unsigned commit for verification.
-		$unsigned          = $commit;
-		$unsigned['sig']   = null;
+		// Must remove 'sig' entirely (not set to null) to match the
+		// CBOR encoding used during signing in create().
+		$unsigned = $commit;
+		unset( $unsigned['sig'] );
 
 		$unsigned_cbor = CBOR::encode( $unsigned );
 
@@ -159,67 +161,4 @@ class Commit {
 		return $commit['did'] ?? '';
 	}
 
-	/**
-	 * Build a commit diff between two commits.
-	 *
-	 * @param array $old_commit The old commit.
-	 * @param array $new_commit The new commit.
-	 * @return array Array of changes.
-	 */
-	public static function diff( $old_commit, $new_commit ) {
-		// Get MST roots.
-		$old_root = self::get_data_cid( $old_commit );
-		$new_root = self::get_data_cid( $new_commit );
-
-		if ( $old_root === $new_root ) {
-			return array();
-		}
-
-		// Get entries from both trees.
-		$old_entries = array();
-		$new_entries = array();
-
-		if ( $old_root ) {
-			foreach ( MST::list_entries( $old_root ) as $entry ) {
-				$old_entries[ $entry['key'] ] = $entry['cid'];
-			}
-		}
-
-		if ( $new_root ) {
-			foreach ( MST::list_entries( $new_root ) as $entry ) {
-				$new_entries[ $entry['key'] ] = $entry['cid'];
-			}
-		}
-
-		$changes = array();
-
-		// Find creates and updates.
-		foreach ( $new_entries as $key => $cid ) {
-			if ( ! isset( $old_entries[ $key ] ) ) {
-				$changes[] = array(
-					'action' => 'create',
-					'key'    => $key,
-					'cid'    => $cid,
-				);
-			} elseif ( $old_entries[ $key ] !== $cid ) {
-				$changes[] = array(
-					'action' => 'update',
-					'key'    => $key,
-					'cid'    => $cid,
-				);
-			}
-		}
-
-		// Find deletes.
-		foreach ( $old_entries as $key => $cid ) {
-			if ( ! isset( $new_entries[ $key ] ) ) {
-				$changes[] = array(
-					'action' => 'delete',
-					'key'    => $key,
-				);
-			}
-		}
-
-		return $changes;
-	}
 }
