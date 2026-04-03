@@ -1,0 +1,114 @@
+# Example nginx configuration for AT Protocol Firehose module
+#
+# This configuration shows how to set up nginx with the atproto_firehose module
+# to handle WebSocket connections for subscribeRepos and broadcast events from PHP.
+
+# Load the dynamic module (adjust path as needed)
+load_module modules/ngx_http_atproto_firehose_module.so;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    # Enable the firehose module
+    atproto_firehose on;
+
+    # Ping interval for WebSocket keep-alive (default: 25s)
+    atproto_firehose_ping_interval 25s;
+
+    # Upstream for PHP-FPM
+    upstream php-fpm {
+        server unix:/var/run/php-fpm.sock;
+        # Or: server 127.0.0.1:9000;
+    }
+
+    server {
+        listen 80;
+        server_name example.com;
+
+        root /var/www/html;
+        index index.php index.html;
+
+        # WebSocket endpoint for AT Protocol subscribeRepos
+        # Clients connect here to receive real-time events
+        location = /xrpc/com.atproto.sync.subscribeRepos {
+            atproto_firehose_endpoint;
+
+            # WebSocket-specific settings
+            proxy_http_version 1.1;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+        }
+
+        # Other XRPC endpoints pass to PHP-FPM
+        # The module will intercept X-ATProto-Event headers
+        # and broadcast them to connected WebSocket clients
+        location ~ ^/xrpc/ {
+            try_files $uri $uri/ /index.php?$args;
+        }
+
+        # WordPress/PHP handling
+        location ~ \.php$ {
+            fastcgi_pass php-fpm;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            include fastcgi_params;
+
+            # Ensure headers are passed through for firehose interception
+            fastcgi_pass_header X-ATProto-Event;
+        }
+
+        # WordPress pretty permalinks
+        location / {
+            try_files $uri $uri/ /index.php?$args;
+        }
+
+        # .well-known endpoints for AT Protocol
+        location ~ ^/\.well-known/ {
+            try_files $uri /index.php?$args;
+        }
+    }
+
+    # HTTPS server (recommended for production)
+    server {
+        listen 443 ssl http2;
+        server_name example.com;
+
+        ssl_certificate     /etc/ssl/certs/example.com.crt;
+        ssl_certificate_key /etc/ssl/private/example.com.key;
+
+        root /var/www/html;
+        index index.php index.html;
+
+        # WebSocket endpoint with SSL
+        location = /xrpc/com.atproto.sync.subscribeRepos {
+            atproto_firehose_endpoint;
+
+            proxy_http_version 1.1;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+        }
+
+        location ~ ^/xrpc/ {
+            try_files $uri $uri/ /index.php?$args;
+        }
+
+        location ~ \.php$ {
+            fastcgi_pass php-fpm;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            include fastcgi_params;
+            fastcgi_pass_header X-ATProto-Event;
+        }
+
+        location / {
+            try_files $uri $uri/ /index.php?$args;
+        }
+
+        location ~ ^/\.well-known/ {
+            try_files $uri /index.php?$args;
+        }
+    }
+}

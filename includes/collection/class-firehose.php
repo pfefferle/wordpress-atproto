@@ -20,13 +20,6 @@ defined( 'ABSPATH' ) || exit;
  */
 class Firehose {
 	/**
-	 * Option name for event queue.
-	 *
-	 * @var string
-	 */
-	const OPTION_QUEUE = 'atproto_firehose_queue';
-
-	/**
 	 * Option name for sequence number.
 	 *
 	 * @var string
@@ -34,11 +27,18 @@ class Firehose {
 	const OPTION_SEQ = 'atproto_firehose_seq';
 
 	/**
-	 * Maximum queue size.
+	 * Option name for bridge URL.
 	 *
-	 * @var int
+	 * @var string
 	 */
-	const MAX_QUEUE_SIZE = 1000;
+	const OPTION_BRIDGE_URL = 'atproto_firehose_bridge_url';
+
+	/**
+	 * Option name for bridge secret.
+	 *
+	 * @var string
+	 */
+	const OPTION_BRIDGE_SECRET = 'atproto_firehose_bridge_secret';
 
 	/**
 	 * Emit a commit event.
@@ -58,7 +58,7 @@ class Firehose {
 			'ops'   => $operations,
 		);
 
-		self::queue_event( $event );
+		self::emit_event( $event );
 
 		/**
 		 * Fires when a commit event is emitted.
@@ -88,7 +88,7 @@ class Firehose {
 			'handle' => $handle,
 		);
 
-		self::queue_event( $event );
+		self::emit_event( $event );
 
 		/**
 		 * Fires when an identity event is emitted.
@@ -122,7 +122,7 @@ class Firehose {
 			$event['status'] = $status;
 		}
 
-		self::queue_event( $event );
+		self::emit_event( $event );
 
 		return $seq;
 	}
@@ -149,45 +149,57 @@ class Firehose {
 	}
 
 	/**
-	 * Queue an event.
+	 * Emit an event via HTTP header and/or bridge.
 	 *
-	 * @param array $event The event to queue.
+	 * @param array $event The event to emit.
 	 * @return void
 	 */
-	private static function queue_event( $event ) {
-		$queue   = get_option( self::OPTION_QUEUE, array() );
-		$queue[] = $event;
+	private static function emit_event( $event ) {
+		$cbor_frame = self::encode_events( array( $event ) );
 
-		// Trim queue if too large.
-		if ( count( $queue ) > self::MAX_QUEUE_SIZE ) {
-			$queue = array_slice( $queue, -self::MAX_QUEUE_SIZE );
+		// Emit via HTTP header for nginx module.
+		if ( ! headers_sent() ) {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			@header( 'X-ATProto-Event: ' . base64_encode( $cbor_frame ), false );
 		}
 
-		update_option( self::OPTION_QUEUE, $queue, false );
+		// POST to bridge if configured.
+		self::post_to_bridge( $cbor_frame );
 	}
 
 	/**
-	 * Get events from queue.
+	 * POST event to external bridge.
 	 *
-	 * @param int $since_seq Get events after this sequence number.
-	 * @param int $limit     Maximum events to return.
-	 * @return array Array of events.
+	 * @param string $cbor_frame The CBOR-encoded frame.
+	 * @return void
 	 */
-	public static function get_events( $since_seq = 0, $limit = 100 ) {
-		$queue  = get_option( self::OPTION_QUEUE, array() );
-		$events = array();
+	private static function post_to_bridge( $cbor_frame ) {
+		$bridge_url = get_option( self::OPTION_BRIDGE_URL );
 
-		foreach ( $queue as $event ) {
-			if ( $event['seq'] > $since_seq ) {
-				$events[] = $event;
-
-				if ( count( $events ) >= $limit ) {
-					break;
-				}
-			}
+		if ( empty( $bridge_url ) ) {
+			return;
 		}
 
-		return $events;
+		$headers = array(
+			'Content-Type' => 'application/octet-stream',
+		);
+
+		$secret = get_option( self::OPTION_BRIDGE_SECRET );
+		if ( ! empty( $secret ) ) {
+			$headers['Authorization'] = 'Bearer ' . $secret;
+		}
+
+		// Non-blocking request (fire and forget).
+		wp_remote_post(
+			trailingslashit( $bridge_url ) . 'event',
+			array(
+				'headers'   => $headers,
+				'body'      => $cbor_frame,
+				'timeout'   => 1,
+				'blocking'  => false,
+				'sslverify' => true,
+			)
+		);
 	}
 
 	/**
